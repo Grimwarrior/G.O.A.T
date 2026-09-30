@@ -114,6 +114,10 @@ namespace GOAT
         void DetachDirectorFilter(AgentId, IDirectorFilter&) override {}
         void WakeAgents(AZStd::span<const AgentId>) override {}
         bool TickAgent(AgentId, float) override { return false; }
+        AZ::Outcome<void, AZStd::string> DeclareProgram(const AZ::Name&, AZStd::shared_ptr<const AuthoredNode>) override
+        {
+            return AZ::Failure(AZStd::string("the test agent system declares nothing"));
+        }
         bool RegisterBackend(AZStd::unique_ptr<IBackend>) override { return false; }
         void UnregisterBackend(const AZ::Name&) override {}
         bool RegisterNodeType(NodeTypeDescriptor) override { return false; }

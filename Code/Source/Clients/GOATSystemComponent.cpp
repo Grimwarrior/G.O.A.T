@@ -603,14 +603,8 @@ namespace GOAT
             return AZ::Failure(AZStd::string("The scripting services are not running"));
         }
 
-        if (!EnsureVocabulary())
-        {
-            return AZ::Failure(AZStd::string(
-                "The GOAT authoring vocabulary is not loaded; check that goat/scripts/goat.lua reached the cache"));
-        }
-
-        // Ask Lua for the authored tree, then compile it exactly as a graph editor's asset would be.
-        auto emitted = m_dispatch->EmitTree(programName);
+        // Take the declared tree, or ask Lua for it, then compile it exactly as a graph editor's asset would be.
+        auto emitted = EmitProgram(programName);
         if (!emitted.IsSuccess())
         {
             return AZ::Failure(emitted.TakeError());
@@ -986,15 +980,23 @@ namespace GOAT
         // the scan above cannot see it. Retrying every declared but uncompiled tree is what lets
         // a slot be bound after the agents using it have already activated -- without this,
         // a tree with an unbound slot could never compile at any point.
-        if (m_dispatch != nullptr)
+        AZStd::vector<AZ::Name> declaredNames;
+        for (const auto& [declared, root] : m_declaredPrograms)
+        {
+            declaredNames.push_back(declared);
+        }
+        if (m_dispatch != nullptr && m_dispatch->IsReady())
         {
             for (const AZ::Name& declared : m_dispatch->GetDeclaredTreeNames())
             {
-                if (!IsProgramCompiled(declared) &&
-                    AZStd::find(affected.begin(), affected.end(), declared) == affected.end())
-                {
-                    affected.push_back(declared);
-                }
+                declaredNames.push_back(declared);
+            }
+        }
+        for (const AZ::Name& declared : declaredNames)
+        {
+            if (!IsProgramCompiled(declared) && AZStd::find(affected.begin(), affected.end(), declared) == affected.end())
+            {
+                affected.push_back(declared);
             }
         }
 
@@ -1094,12 +1096,34 @@ namespace GOAT
         }
     }
 
+    AZ::Outcome<void, AZStd::string> GOATSystemComponent::DeclareProgram(
+        const AZ::Name& name, AZStd::shared_ptr<const AuthoredNode> root)
+    {
+        if (name.IsEmpty() || root == nullptr || root->m_type.empty())
+        {
+            return AZ::Failure(AZStd::string("A declared program needs a name and a root node"));
+        }
+        m_declaredPrograms[name] = AZStd::move(root);
+        m_programs.erase(name);
+        return AZ::Success();
+    }
+
     AZ::Outcome<AZStd::shared_ptr<const AuthoredNode>, AZStd::string> GOATSystemComponent::EmitProgram(
         const AZ::Name& name)
     {
+        if (const auto declared = m_declaredPrograms.find(name); declared != m_declaredPrograms.end())
+        {
+            return AZ::Success(declared->second);
+        }
         if (m_dispatch == nullptr)
         {
             return AZ::Failure(AZStd::string("scripting is not running, so nothing can be emitted"));
+        }
+        if (!EnsureVocabulary())
+        {
+            return AZ::Failure(AZStd::string::format(
+                "No program named '%s' was declared, and the GOAT authoring vocabulary to look in Lua is not loaded",
+                name.GetCStr()));
         }
         return m_dispatch->EmitTree(name);
     }
@@ -1247,12 +1271,7 @@ namespace GOAT
         }
 
         // Not compiled yet, so ask the word it is rooted in who gives that word meaning.
-        if (m_dispatch == nullptr)
-        {
-            return nullptr;
-        }
-
-        auto emitted = m_dispatch->EmitTree(programName);
+        auto emitted = const_cast<GOATSystemComponent*>(this)->EmitProgram(programName);
         if (!emitted.IsSuccess() || emitted.GetValue() == nullptr)
         {
             return nullptr;
@@ -1938,8 +1957,10 @@ namespace GOAT
 
     void GOATSystemComponent::RegisterAssetHandlers()
     {
-        // The launcher loads one module and the editor another, so only the first registration wins.
-        if (AZ::Data::AssetManager::Instance().GetHandler(azrtti_typeid<BlackboardAsset>()) != nullptr)
+        // The launcher loads one module and the editor another, so only the first registration wins; with no asset
+        // manager (a unit test of C++ declared programs) there is nothing to register with.
+        if (!AZ::Data::AssetManager::IsReady() ||
+            AZ::Data::AssetManager::Instance().GetHandler(azrtti_typeid<BlackboardAsset>()) != nullptr)
         {
             return;
         }

@@ -103,6 +103,8 @@ namespace GOAT
         void OnCatalogLoaded(const char* catalogFile) override;
         ////////////////////////////////////////////////////////////////////////
 
+        AZ::Outcome<void, AZStd::string> DeclareProgram(const AZ::Name& name, AZStd::shared_ptr<const AuthoredNode> root) override;
+
         //! What a backend may reach of the core.
         AZ::Outcome<AZStd::shared_ptr<const AuthoredNode>, AZStd::string> EmitProgram(
             const AZ::Name& name) override;
@@ -291,6 +293,8 @@ namespace GOAT
 
         //! Trees compiled so far, shared by every agent running the same one.
         AZStd::unordered_map<AZ::Name, AZStd::shared_ptr<const AgentProgram>> m_programs;
+        //! Programs declared from C++ or data rather than Lua, by name; found before Lua's.
+        AZStd::unordered_map<AZ::Name, AZStd::shared_ptr<const AuthoredNode>> m_declaredPrograms;
         AZStd::vector<AZStd::unique_ptr<AZ::Data::AssetHandler>> m_assetHandlers;
         //! Vocabulary files backend gems ship, run in the order they registered.
         AZStd::vector<AZStd::string> m_vocabularyScripts;

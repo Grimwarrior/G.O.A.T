@@ -45,6 +45,12 @@ namespace GOAT
         //! Declares the variables a blackboard asset holds. Duplicate names fail.
         virtual AZ::Outcome<void, AZStd::string> LoadBlackboard(const BlackboardAsset& asset) = 0;
 
+        //! Declares a program from C++ or data, e.g. read from JSON, instead of Lua: the authored tree Lua's tree() or
+        //! domain() would build, with properties as AZStd::string, double or bool. It shares one namespace with Lua's
+        //! programs and wins over one of the same name; declaring it again replaces it and drops its compiled form.
+        //! Compile it like any other with CompileProgram, which needs no scripting for it.
+        virtual AZ::Outcome<void, AZStd::string> DeclareProgram(const AZ::Name& name, AZStd::shared_ptr<const AuthoredNode> root) = 0;
+
         //! Compiles a declared program through a named backend. Always recompiles, which is
         //! what makes it the way to pick up a rebound dynamic subtree.
         virtual AZ::Outcome<void, AZStd::string> CompileProgram(

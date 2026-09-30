@@ -201,7 +201,10 @@ namespace GOAT
         record->m_observer.Disconnect();
 
         // Drop the Lua scratch before the slot can be reused, so a new agent starts clean.
-        m_dispatch.ForgetAgent(agent);
+        if (m_dispatch.IsReady())
+        {
+            m_dispatch.ForgetAgent(agent);
+        }
         m_byEntity.erase(record->m_entity);
         m_blackboard.DestroyAgentBlackboard(agent);
         m_agents.Release(agent);
