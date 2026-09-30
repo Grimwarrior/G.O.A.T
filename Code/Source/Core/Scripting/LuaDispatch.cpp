@@ -520,11 +520,11 @@ namespace GOAT
 
     void LuaDispatch::ForgetAgent(AgentId agent)
     {
+        // Without the vocabulary no Lua ever ran for the agent, so it has no scratch to drop (programs declared from
+        // data never load the vocabulary).
         AZ::ScriptDataContext call;
         if (!BeginCall("GOAT_ForgetAgent", call))
         {
-            AZ_Error("GOAT", false, "GOAT_ForgetAgent is missing, so agent %u's Lua scratch will outlive it",
-                agent.GetIndex());
             return;
         }
 

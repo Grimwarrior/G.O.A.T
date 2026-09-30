@@ -122,7 +122,7 @@ namespace GOAT
         ActionResult CallFlowFilter(
             const AZ::Name& flow, AgentId agent, AgentScriptContext& context, NodeIndex node, ActionResult childResult);
 
-        //! Drops the scratch tables an agent owned, so a reused slot starts clean.
+        //! Drops the scratch tables an agent owned, so a reused slot starts clean; nothing to do if the vocabulary never loaded.
         void ForgetAgent(AgentId agent);
 
         //! Makes a node type name usable as a word in authored trees.
