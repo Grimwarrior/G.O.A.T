@@ -10,6 +10,7 @@
 #include <Core/Scripting/LuaNodeScripting.h>
 
 #include <GOAT/Domain/AgentProgram.h>
+#include <GOAT/Interfaces/IAgentSystem.h>
 #include <GOAT/Interfaces/IDecisionBackend.h>
 #include <GOAT/Domain/PlanStore.h>
 
@@ -23,8 +24,8 @@
 
 namespace GOAT
 {
-    //! Enough of a backend for an agent to count as having something to run. Nothing here ticks,
-    //! so it is never asked to decide.
+    //! Enough of a backend for an agent to count as having something to run. It counts how often it
+    //! is asked to decide, so a test can tell when an agent ticked.
     class IdleBackend final : public IDecisionBackend
     {
     public:
@@ -41,8 +42,11 @@ namespace GOAT
 
         Decision Decide(const PlanContext&, const AgentProgram&, BrainState, ActionResult, float, ActionPlan&) override
         {
+            ++m_decided;
             return Decision{};
         }
+
+        int m_decided = 0; //!< How many times an agent running it was asked to decide.
     };
 
     //! Accepts or rejects by a fixed list, so a test says who is governed without needing an
@@ -152,6 +156,28 @@ namespace GOAT
         AZStd::unique_ptr<DirectorRegistry> m_directors;
         AZStd::shared_ptr<const AgentArchetype> m_archetype;
     };
+
+    //! An agent on the manual band is left alone by every scheduled band and ticks when asked, so a
+    //! turn-based game decides for it once a turn.
+    TEST_F(DirectorFilterFixture, ManualBand_TicksOnlyWhenAsked)
+    {
+        const AgentId agent = m_agents->Register(AZ::EntityId(7), m_archetype, ManualBand, AZ::Name{});
+        ASSERT_FALSE(agent.IsNull());
+        for (size_t band = 0; band < AgentRegistry::BandCount; ++band)
+        {
+            m_agents->TickBand(band);
+        }
+        EXPECT_EQ(m_backend.m_decided, 0);
+
+        EXPECT_TRUE(m_agents->TickAgent(agent, 1.0f));
+        EXPECT_EQ(m_backend.m_decided, 1);
+        EXPECT_FALSE(m_agents->TickAgent(AgentId{}, 1.0f)) << "an agent that isn't registered can't tick";
+
+        m_agents->SetBand(agent, 0);
+        m_agents->SetBand(agent, ManualBand);
+        m_agents->TickBand(0);
+        EXPECT_EQ(m_backend.m_decided, 1) << "back on the manual band, the scheduled band leaves it again";
+    }
 
     //! The whole point of the change: nothing attached means nothing narrowed.
     TEST_F(DirectorFilterFixture, Resolve_GovernsEveryAgentButItselfWithNoFilter)

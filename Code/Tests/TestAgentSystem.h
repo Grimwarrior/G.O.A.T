@@ -113,6 +113,7 @@ namespace GOAT
         bool AttachDirectorFilter(AgentId, IDirectorFilter&) override { return false; }
         void DetachDirectorFilter(AgentId, IDirectorFilter&) override {}
         void WakeAgents(AZStd::span<const AgentId>) override {}
+        bool TickAgent(AgentId, float) override { return false; }
         bool RegisterBackend(AZStd::unique_ptr<IBackend>) override { return false; }
         void UnregisterBackend(const AZ::Name&) override {}
         bool RegisterNodeType(NodeTypeDescriptor) override { return false; }

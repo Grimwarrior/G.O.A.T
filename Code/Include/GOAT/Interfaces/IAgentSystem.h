@@ -26,6 +26,10 @@
 
 namespace GOAT
 {
+    //! The pacing band of agents that nothing schedules: they tick only when TickAgent is called, e.g. once a turn by a
+    //! turn-based game.
+    inline constexpr size_t ManualBand = 4;
+
     //! Turns entities into agents and lets modules and backends extend the vocabulary.
     //! This is the whole surface a game or an extension gem needs.
     class IAgentSystem
@@ -125,6 +129,10 @@ namespace GOAT
 
         //! Wakes agents whose running action was waiting to be told something.
         virtual void WakeAgents(AZStd::span<const AgentId> agents) = 0;
+
+        //! Ticks one agent now, deltaTime seconds after its last tick, whatever its band; for agents on ManualBand,
+        //! which nothing else ticks. False when it is not registered.
+        virtual bool TickAgent(AgentId agent, float deltaTime) = 0;
 
         //! What a backend may reach of the core while compiling and deciding.
         //! @{

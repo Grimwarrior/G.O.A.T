@@ -60,6 +60,7 @@ namespace GOAT
             const AZ::Name& squad) override;
         void UnregisterAgent(AgentId agent) override;
         void WakeAgents(AZStd::span<const AgentId> agents) override;
+        bool TickAgent(AgentId agent, float deltaTime) override;
         bool SetAgentTree(AgentId agent, const AZ::Name& treeName, AZ::u8 priority) override;
         bool PushAgentTree(AgentId agent, const AZ::Name& treeName, AZ::u8 priority) override;
         bool PopAgentTree(AgentId agent) override;

@@ -28,7 +28,7 @@ It uses a `AgentStore` for dense, generation-checked storage of `AgentRecord`s, 
 | 2 | **Agent Unregistration** | Removes agents, cleans up their blackboard and Lua scratch. |
 | 3 | **Agent Lookup** | Provides `Find(AgentId)` for runtime access. |
 | 4 | **Band Scheduling** | Paces agents into 4 bands using `AZ::ScheduledEvent`. |
-| 5 | **Band Management** | Allows moving agents between bands and changing band intervals. |
+| 5 | **Band Management** | Allows moving agents between bands, including `ManualBand`, which nothing schedules. |
 
 ---
 
@@ -56,8 +56,11 @@ AgentRecord* Find(AgentId agent);
 // Moves an agent to a different pacing band.
 void SetBand(AgentId agent, size_t band);
 
-// How often each band runs.
-void SetBandIntervals(const AZStd::array<AZ::TimeMs, BandCount>& intervals);
+// How often a band runs; the intervals are fixed defaults.
+AZ::TimeMs GetBandInterval(size_t band) const;
+
+// Runs one agent now, whatever its band. The only way an agent on ManualBand ticks.
+bool TickAgent(AgentId agent, float deltaTime);
 
 size_t Size() const { return m_agents.Size(); }
 
@@ -112,6 +115,10 @@ const AZ::TimeMs defaults[BandCount] = {
 ```
 
 Each band has its own `AZ::ScheduledEvent` that calls `TickBand(band)`. The event is enqueued with `Requeue(interval, true)` so it repeats automatically.
+
+#### The Manual Band
+
+`ManualBand` (declared in `IAgentSystem.h`, one past the scheduled bands) has no scheduled event and no roster: an agent registered on it, or moved to it with `SetBand`, ticks only when `IAgentSystem::TickAgent` (`AgentRegistry::TickAgent`) is called, with whatever delta time the caller chooses. A turn-based game ticks its agents on their turns this way, passing one turn as the delta so `wait`, `cooldown` and `time_limit` count turns.
 
 #### Registration
 

@@ -1175,6 +1175,11 @@ namespace GOAT
         }
     }
 
+    bool GOATSystemComponent::TickAgent(AgentId agent, float deltaTime)
+    {
+        return m_agents != nullptr && m_agents->TickAgent(agent, deltaTime);
+    }
+
     bool GOATSystemComponent::RegisterDecisionBackend(AZStd::unique_ptr<IDecisionBackend>& backend)
     {
         if (m_decisionBackends == nullptr || backend == nullptr)

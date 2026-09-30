@@ -1,4 +1,5 @@
 #include <Core/Application/AgentRegistry.h>
+#include <GOAT/Interfaces/IAgentSystem.h>
 
 #include <AzCore/Console/ILogger.h>
 #include <AzCore/Name/NameDictionary.h>
@@ -69,9 +70,10 @@ namespace GOAT
             return AgentId{};
         }
 
-        AZ_Warning("GOAT", band < BandCount, "LOD band %zu does not exist; entity %s falls back to the slowest band",
+        static_assert(ManualBand == BandCount, "The manual band follows the scheduled ones");
+        AZ_Warning("GOAT", band <= ManualBand, "LOD band %zu does not exist; entity %s falls back to the slowest band",
             band, entity.ToString().c_str());
-        band = AZStd::min(band, BandCount - 1);
+        band = band == ManualBand ? band : AZStd::min(band, BandCount - 1);
 
         // Written out rather than braced: AZ::EntityId's default constructor is explicit.
         AgentRecord fresh;
@@ -115,7 +117,7 @@ namespace GOAT
 
     void AgentRegistry::AddToBand(AgentId agent, size_t band)
     {
-        AZ_Assert(band < BandCount, "An agent can only join a band that exists");
+        AZ_Assert(band <= ManualBand, "An agent can only join a band that exists");
         if (band >= BandCount)
         {
             return;
@@ -133,7 +135,7 @@ namespace GOAT
 
     void AgentRegistry::RemoveFromBand(AgentId agent, size_t band)
     {
-        AZ_Assert(band < BandCount, "An agent can only be removed from a band that exists");
+        AZ_Assert(band <= ManualBand, "An agent can only be removed from a band that exists");
         if (band >= BandCount)
         {
             return;
@@ -223,7 +225,7 @@ namespace GOAT
 
     AZ::TimeMs AgentRegistry::GetBandInterval(size_t band) const
     {
-        AZ_Assert(band < BandCount, "A band interval is only asked for a band that exists");
+        AZ_Assert(band <= ManualBand, "A band interval is only asked for a band that exists");
         return band < BandCount ? m_bands[band].m_interval : AZ::TimeMs{ 0 };
     }
 
@@ -237,7 +239,7 @@ namespace GOAT
             return;
         }
 
-        band = AZStd::min(band, BandCount - 1);
+        band = band == ManualBand ? band : AZStd::min(band, BandCount - 1);
         if (band == record->m_band)
         {
             return;
@@ -409,6 +411,17 @@ namespace GOAT
                 record->m_wakeIn = 0.0f;
             }
         }
+    }
+
+    bool AgentRegistry::TickAgent(AgentId agent, float deltaTime)
+    {
+        AgentRecord* record = Find(agent);
+        if (record == nullptr)
+        {
+            return false;
+        }
+        m_runtime.Tick(*record, AZStd::max(deltaTime, 0.0f));
+        return true;
     }
 
     void AgentRegistry::TickBand(size_t band)
