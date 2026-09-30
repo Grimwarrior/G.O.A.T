@@ -11,7 +11,7 @@
 
 namespace GOAT
 {
-    BlackboardKey AgentScriptContext::Resolve(const AZStd::string& name, const char* access) const
+    BlackboardKey AgentScriptContext::Resolve(const AZStd::string& name, [[maybe_unused]] const char* access) const
     {
         AZ_Assert(access != nullptr, "A resolve always names what the script was doing");
         AZ_Assert(m_blackboard != nullptr, "A script only reaches the blackboard while this context is bound");
@@ -43,7 +43,7 @@ namespace GOAT
         return key.IsValid() ? static_cast<double>(key.GetPacked()) + 1.0 : 0.0;
     }
 
-    BlackboardKey AgentScriptContext::FromLua(double key, const char* access) const
+    BlackboardKey AgentScriptContext::FromLua(double key, [[maybe_unused]] const char* access) const
     {
         if (m_blackboard == nullptr)
         {
@@ -109,7 +109,7 @@ namespace GOAT
         }
 
         // Hoisted out of the warning on purpose: a trace macro's expression is not compiled in release.
-        const bool written = m_blackboard->Set<bool>(slot, value, m_agent);
+        [[maybe_unused]] const bool written = m_blackboard->Set<bool>(slot, value, m_agent);
         AZ_Warning("GOAT", written, "Writing a boolean for agent %u failed; it is declared as another type",
             m_agent.GetIndex());
     }
@@ -144,7 +144,7 @@ namespace GOAT
             return;
         }
 
-        const bool written = slot.GetType() == BlackboardType::Int
+        [[maybe_unused]] const bool written = slot.GetType() == BlackboardType::Int
             ? m_blackboard->Set<AZ::s64>(slot, static_cast<AZ::s64>(value), m_agent)
             : m_blackboard->Set<float>(slot, static_cast<float>(value), m_agent);
 
@@ -175,7 +175,7 @@ namespace GOAT
         }
 
         // Hoisted out of the warning on purpose: a trace macro's expression is not compiled in release.
-        const bool written = m_blackboard->Set<AZ::Vector3>(slot, value, m_agent);
+        [[maybe_unused]] const bool written = m_blackboard->Set<AZ::Vector3>(slot, value, m_agent);
         AZ_Warning("GOAT", written, "Writing a vector for agent %u failed; it is declared as another type",
             m_agent.GetIndex());
     }
@@ -203,7 +203,7 @@ namespace GOAT
         }
 
         // Hoisted out of the warning on purpose: a trace macro's expression is not compiled in release.
-        const bool written = m_blackboard->Set<AZ::EntityId>(slot, value, m_agent);
+        [[maybe_unused]] const bool written = m_blackboard->Set<AZ::EntityId>(slot, value, m_agent);
         AZ_Warning("GOAT", written, "Writing an entity for agent %u failed; it is declared as another type",
             m_agent.GetIndex());
     }
@@ -231,7 +231,7 @@ namespace GOAT
         }
 
         // Hoisted out of the warning on purpose: a trace macro's expression is not compiled in release.
-        const bool written = m_blackboard->Set<AZ::Name>(slot, AZ::Name(value), m_agent);
+        [[maybe_unused]] const bool written = m_blackboard->Set<AZ::Name>(slot, AZ::Name(value), m_agent);
         AZ_Warning("GOAT", written, "Writing a name for agent %u failed; it is declared as another type",
             m_agent.GetIndex());
     }

@@ -371,10 +371,9 @@ namespace GOAT
         m_vocabularyScripts.push_back(path);
 
         // A gem that arrives after the vocabulary loaded gets its words now rather than never.
-        if (m_vocabularyLoaded)
+        if (m_vocabularyLoaded && !RunScript(path, "a gem's vocabulary"))
         {
-            AZ_Warning("GOAT", RunScript(path, "a gem's vocabulary"),
-                "Could not load the vocabulary script at '%s'", path.c_str());
+            AZ_Warning("GOAT", false, "Could not load the vocabulary script at '%s'", path.c_str());
         }
     }
 
@@ -398,14 +397,18 @@ namespace GOAT
         // A backend gem's words load after the ones they are written in and before any user script.
         for (const AZStd::string& path : m_vocabularyScripts)
         {
-            AZ_Warning("GOAT", RunScript(path, "a gem's vocabulary"),
-                "Could not load the vocabulary script at '%s'", path.c_str());
+            if (!RunScript(path, "a gem's vocabulary"))
+            {
+                AZ_Warning("GOAT", false, "Could not load the vocabulary script at '%s'", path.c_str());
+            }
         }
 
         // The backends the gem ships load straight after the words they are written in, and
         // before any user script, so a tree may delegate to one without declaring it.
-        AZ_Warning("GOAT", RunFirstAvailable(BackendAssetPaths, AZStd::size(BackendAssetPaths), "the shipped backends"),
-            "Could not load GOAT's shipped backends; delegate \"bt\" will not resolve");
+        if (!RunFirstAvailable(BackendAssetPaths, AZStd::size(BackendAssetPaths), "the shipped backends"))
+        {
+            AZ_Warning("GOAT", false, "Could not load GOAT's shipped backends; delegate \"bt\" will not resolve");
+        }
 
         return true;
     }
@@ -473,7 +476,7 @@ namespace GOAT
         m_dispatch->ValidatePlans();
 
         const LuaPlanValidator& validator = m_dispatch->GetPlanValidator();
-        for (const AZStd::string& problem : validator.GetProblems())
+        for ([[maybe_unused]] const AZStd::string& problem : validator.GetProblems())
         {
             AZ_Error("GOAT", false, "%s", problem.c_str());
         }

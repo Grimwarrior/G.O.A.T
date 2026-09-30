@@ -1,0 +1,94 @@
+{
+    "Type": "JsonSerialization",
+    "Version": 1,
+    "ClassName": "AZStd::vector<SeedInfo, allocator>",
+    "ClassData": [
+        {
+            "assetId": {
+                "guid": "{2CC82E72-70F9-5AC3-91E4-620F146BC980}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat/backends/behaviortreebackend.luac"
+        },
+        {
+            "assetId": {
+                "guid": "{094BBCCA-0D36-51F4-8D7C-F5D449B746E9}"
+            },
+            "platformFlags": 255,
+            "pathHint": "goat/blackboards/example.bbx"
+        },
+        {
+            "assetId": {
+                "guid": "{5A16E65A-15DF-5CD0-BE38-089E3F5C283B}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat/scripts/goat.luac"
+        },
+        {
+            "assetId": {
+                "guid": "{F302731E-EE49-5156-AA10-7DBC6678B097}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat/scripts/smartobjectagent.luac"
+        },
+        {
+            "assetId": {
+                "guid": "{E6D0045A-4239-57DF-8D9E-9E3764358C7E}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat_behaviortree/scripts/behaviortree.luac"
+        },
+        {
+            "assetId": {
+                "guid": "{241DAFEC-09F7-5358-B997-78182F65CE3A}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat_behaviortree/scripts/exampleadvanced.luac"
+        },
+        {
+            "assetId": {
+                "guid": "{BB73F6E0-2964-502B-9945-60B7A0434748}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat_behaviortree/scripts/exampleagent.luac"
+        },
+        {
+            "assetId": {
+                "guid": "{AA753721-BD73-5419-A172-6AACCADC15D1}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat_htn/scripts/exampledomain.luac"
+        },
+        {
+            "assetId": {
+                "guid": "{6398B629-ABF5-5C96-AE4E-FCE5111F09EF}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat_htn/scripts/htn.luac"
+        },
+        {
+            "assetId": {
+                "guid": "{B8816D96-7866-51DE-8A01-DBB75A93FDF0}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat_utility/scripts/examplechoices.luac"
+        },
+        {
+            "assetId": {
+                "guid": "{723C5F7A-1DE9-5043-986B-A8735452F4A2}",
+                "subId": 1
+            },
+            "platformFlags": 255,
+            "pathHint": "goat_utility/scripts/utility.luac"
+        }
+    ]
+}

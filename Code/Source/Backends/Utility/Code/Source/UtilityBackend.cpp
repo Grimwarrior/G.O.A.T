@@ -71,8 +71,8 @@ namespace GOAT
         //! Kept off the path a usable value takes, because naming the variable it came from
         //! means scanning for the name. @param warned lives on the program, so this is one line
         //! per mistake rather than one per agent per frame.
-        float InRange(const float* read, const UtilityProgram& program, const UtilityChoice& choice,
-            const char* source, bool& warned)
+        float InRange(const float* read, [[maybe_unused]] const UtilityProgram& program, [[maybe_unused]] const UtilityChoice& choice,
+            [[maybe_unused]] const char* source, bool& warned)
         {
             if (read == nullptr)
             {

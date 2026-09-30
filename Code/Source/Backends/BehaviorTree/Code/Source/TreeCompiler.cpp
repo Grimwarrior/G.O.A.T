@@ -192,7 +192,7 @@ namespace GOAT
         }
 
         // The subtree node itself leaves no trace: its referenced root takes its place.
-        const size_t depthBefore = inlining.size();
+        [[maybe_unused]] const size_t depthBefore = inlining.size();
 
         inlining.push_back(treeName);
         auto emitted = Emit(*referenced, parent, depth, program, inlining);

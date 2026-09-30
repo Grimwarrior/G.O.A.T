@@ -52,7 +52,7 @@ namespace GOAT
             layout.m_defaults.emplace_back(key, AZStd::move(defaultValue));
         }
 
-        const size_t before = m_keysByName.size();
+        [[maybe_unused]] const size_t before = m_keysByName.size();
         m_keysByName.emplace(name, key);
 
         AZ_Assert(m_keysByName.size() == before + 1, "Declaring a new variable must add exactly one name");
