@@ -32,9 +32,9 @@
     "compatible_engines": [],
     "engine_api_dependencies": [],
     "external_subdirectories": [
-        "Code/Source/Backends/BehaviorTree",
-        "Code/Source/Backends/Htn",
         "Code/Source/Backends/Utility",
+        "Code/Source/Backends/Htn",
+        "Code/Source/Backends/BehaviorTree",
         "Modules/Navigation",
         "Modules/Animation",
         "Modules/SmartObject"
