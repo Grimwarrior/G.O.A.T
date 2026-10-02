@@ -68,15 +68,36 @@ namespace GOAT_SmartObject
         return true;
     }
 
-    SmartObjectClaim SmartObjectRegistry::Claim(
-        GOAT::AgentId agent, const AZ::Name& use, const AZ::Vector3& from, float radius)
+    bool SmartObjectRegistry::Matches(const SmartObjectDescription& description, const SmartObjectQuery& query)
+    {
+        const auto& uses = description.m_uses;
+        if (AZStd::find(uses.begin(), uses.end(), query.m_use) == uses.end())
+        {
+            return false;
+        }
+
+        // An object nobody owns is anyone's; an owned one is only its owner's.
+        if (!query.m_owner.IsEmpty() && !description.m_owner.IsEmpty() && description.m_owner != query.m_owner)
+        {
+            return false;
+        }
+
+        const auto& tags = description.m_tags;
+        return AZStd::all_of(query.m_requiredTags.begin(), query.m_requiredTags.end(),
+            [&tags](const AZ::Name& tag)
+            {
+                return AZStd::find(tags.begin(), tags.end(), tag) != tags.end();
+            });
+    }
+
+    SmartObjectClaim SmartObjectRegistry::Claim(GOAT::AgentId agent, const SmartObjectQuery& query)
     {
         AZ_Assert(!agent.IsNull(), "A null agent cannot claim a smart object");
-        AZ_Assert(!use.IsEmpty(), "A smart object is always claimed by the name of a use");
-        AZ_Assert(radius > 0.0f, "A search radius must be positive");
+        AZ_Assert(!query.m_use.IsEmpty(), "A smart object is always claimed by the name of a use");
+        AZ_Assert(query.m_radius > 0.0f, "A search radius must be positive");
 
         SmartObjectClaim claim;
-        if (agent.IsNull() || use.IsEmpty())
+        if (agent.IsNull() || query.m_use.IsEmpty())
         {
             return claim;
         }
@@ -85,19 +106,13 @@ namespace GOAT_SmartObject
         Release(agent);
         AZ_Assert(m_claims.find(agent) == m_claims.end(), "Claiming must start from an agent holding nothing");
 
-        float bestDistanceSq = radius * radius;
+        float bestDistanceSq = query.m_radius * query.m_radius;
         AZ::EntityId bestEntity;
         AZ::Vector3 bestAnchor = AZ::Vector3::CreateZero();
 
         for (auto& [entity, object] : m_objects)
         {
-            if (object.m_users.size() >= object.m_description.m_capacity)
-            {
-                continue;
-            }
-
-            const auto& uses = object.m_description.m_uses;
-            if (AZStd::find(uses.begin(), uses.end(), use) == uses.end())
+            if (object.m_users.size() >= object.m_description.m_capacity || !Matches(object.m_description, query))
             {
                 continue;
             }
@@ -108,7 +123,7 @@ namespace GOAT_SmartObject
                 continue;
             }
 
-            const float distanceSq = from.GetDistanceSq(anchor);
+            const float distanceSq = query.m_from.GetDistanceSq(anchor);
             if (distanceSq >= bestDistanceSq)
             {
                 continue;
@@ -122,7 +137,7 @@ namespace GOAT_SmartObject
         if (!bestEntity.IsValid())
         {
             AZLOG(GoatSmartObject, "GOAT: agent %u found nothing offering '%s' within %.1f m",
-                agent.GetIndex(), use.GetCStr(), radius);
+                agent.GetIndex(), query.m_use.GetCStr(), query.m_radius);
             return claim;
         }
 
@@ -137,8 +152,43 @@ namespace GOAT_SmartObject
             "A smart object must never hold more users than its capacity");
 
         AZLOG(GoatSmartObject, "GOAT: agent %u claimed '%s' on entity %s",
-            agent.GetIndex(), use.GetCStr(), bestEntity.ToString().c_str());
+            agent.GetIndex(), query.m_use.GetCStr(), bestEntity.ToString().c_str());
         return claim;
+    }
+
+    SmartObjectClaim SmartObjectRegistry::FindClaim(GOAT::AgentId agent) const
+    {
+        SmartObjectClaim claim;
+        const auto held = m_claims.find(agent);
+        if (held == m_claims.end())
+        {
+            return claim;
+        }
+
+        const auto object = m_objects.find(held->second);
+        AZ_Assert(object != m_objects.end(), "A recorded claim must point at an object that exists");
+        if (object == m_objects.end() ||
+            !FindAnchor(held->second, object->second.m_description.m_anchorOffset, claim.m_anchor))
+        {
+            return claim;
+        }
+
+        claim.m_entity = held->second;
+        return claim;
+    }
+
+    bool SmartObjectRegistry::SetOwner(AZ::EntityId entity, const AZ::Name& owner)
+    {
+        const auto found = m_objects.find(entity);
+        AZ_Warning("GOAT", found != m_objects.end(), "Entity %s isn't a smart object, so it can't be owned",
+            entity.ToString().c_str());
+        if (found == m_objects.end())
+        {
+            return false;
+        }
+
+        found->second.m_description.m_owner = owner;
+        return true;
     }
 
     void SmartObjectRegistry::Release(GOAT::AgentId agent)

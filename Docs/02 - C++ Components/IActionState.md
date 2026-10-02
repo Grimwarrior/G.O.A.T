@@ -26,7 +26,8 @@ Unlike the earlier design, the interface uses `Begin`, `Step`, and `End` methods
 | 1 | **Action Start** | Initializes the action when it first begins via `Begin()`. |
 | 2 | **Action Update** | Advances the action every frame while it is running via `Step()`. |
 | 3 | **Action End** | Cleans up when the action finishes or is interrupted via `End()`. |
-| 4 | **Naming** | Provides a stable `AZ::Name` for registration and lookup. |
+| 4 | **Forgetting** | Drops what it still holds for an agent that unregistered via `Forget()`. |
+| 5 | **Naming** | Provides a stable `AZ::Name` for registration and lookup. |
 
 ---
 
@@ -46,6 +47,9 @@ virtual ActionResult Step(const ActionContext& context, float deltaTime) = 0;
 
 // Ends the action, whether it completed or was aborted.
 virtual void End(const ActionContext& context) = 0;
+
+// Drops whatever this verb still holds for an agent that went away. Optional.
+virtual void Forget(AgentId agent) {}
 ```
 
 ### ActionContext Struct
@@ -85,6 +89,7 @@ graph LR
 - **`Begin()`** is called once when the action starts. It should use `context.m_scratch` to store per-agent state.
 - **`Step()`** is called every frame. It should return `ActionResult::Running` if the action is still in progress, or `Success`/`Failure` if it has completed.
 - **`End()`** is called when the action finishes or is aborted. It should clean up any resources.
+- **`Forget()`** is called on every registered verb when an agent unregisters, after its running action ended. Only a verb whose effect outlives `End` on purpose needs it, like `claim_smart_object`, whose claim is held while the agent walks there.
 
 ### Performance Considerations
 

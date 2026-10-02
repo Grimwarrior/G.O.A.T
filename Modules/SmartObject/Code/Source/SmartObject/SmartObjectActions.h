@@ -48,6 +48,7 @@ namespace GOAT_SmartObject
         AZ::Name GetName() const override;
         GOAT::ActionResult Step(const GOAT::ActionContext& context, float deltaTime) override;
         void End(const GOAT::ActionContext& context) override;
+        void Forget(GOAT::AgentId agent) override;
 
     private:
         SmartObjectRegistry& m_registry;

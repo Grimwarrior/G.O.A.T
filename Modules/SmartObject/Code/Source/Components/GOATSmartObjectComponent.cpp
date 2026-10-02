@@ -21,10 +21,12 @@ namespace GOAT_SmartObject
         }
 
         serializeContext->Class<GOATSmartObjectComponent, AZ::Component>()
-            ->Version(1)
+            ->Version(2)
             ->Field("Uses", &GOATSmartObjectComponent::m_uses)
             ->Field("AnchorOffset", &GOATSmartObjectComponent::m_anchorOffset)
             ->Field("Capacity", &GOATSmartObjectComponent::m_capacity)
+            ->Field("Tags", &GOATSmartObjectComponent::m_tags)
+            ->Field("Owner", &GOATSmartObjectComponent::m_owner)
             ;
 
         AZ::EditContext* editContext = serializeContext->GetEditContext();
@@ -47,6 +49,10 @@ namespace GOAT_SmartObject
             ->DataElement(AZ::Edit::UIHandlers::SpinBox, &GOATSmartObjectComponent::m_capacity, "Capacity",
                 "How many agents may use this at once.")
                 ->Attribute(AZ::Edit::Attributes::Min, 1)
+            ->DataElement(AZ::Edit::UIHandlers::Default, &GOATSmartObjectComponent::m_tags, "Tags",
+                "Labels a claim can require, as in \"indoor\".")
+            ->DataElement(AZ::Edit::UIHandlers::Default, &GOATSmartObjectComponent::m_owner, "Owner",
+                "Who it belongs to, as in a household. A claim naming another owner skips it; empty is anyone's.")
             ;
     }
 
@@ -91,6 +97,14 @@ namespace GOAT_SmartObject
 
         description.m_anchorOffset = m_anchorOffset;
         description.m_capacity = m_capacity;
+        description.m_owner = m_owner.empty() ? AZ::Name{} : AZ::Name(m_owner);
+        for (const AZStd::string& tag : m_tags)
+        {
+            if (!tag.empty())
+            {
+                description.m_tags.emplace_back(tag);
+            }
+        }
 
         AZLOG_INFO("GOAT: entity %s offers %zu smart object use(s)",
             GetEntityId().ToString().c_str(), description.m_uses.size());

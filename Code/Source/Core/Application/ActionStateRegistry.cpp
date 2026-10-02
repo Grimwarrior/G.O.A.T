@@ -116,4 +116,15 @@ namespace GOAT
         }
         return names;
     }
+    void ActionStateRegistry::ForgetAgent(AgentId agent) const
+    {
+        AZ_Assert(!agent.IsNull(), "Only a real agent can be forgotten");
+        for (const AZStd::unique_ptr<IActionState>& state : m_states)
+        {
+            if (state != nullptr)
+            {
+                state->Forget(agent);
+            }
+        }
+    }
 } // namespace GOAT

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <GOAT/Domain/ActionState.h>
+#include <GOAT/Domain/AgentId.h>
 #include <GOAT/Interfaces/IActionState.h>
 
 #include <AzCore/Name/Name.h>
@@ -32,6 +33,9 @@ namespace GOAT
 
         //! Every registered verb name, for console output and authoring validation.
         AZStd::vector<AZ::Name> GetNames() const;
+
+        //! Tells every registered verb an agent is gone, so none keeps holding something for it.
+        void ForgetAgent(AgentId agent) const;
 
     private:
         //! Grows the table so an id is addressable.

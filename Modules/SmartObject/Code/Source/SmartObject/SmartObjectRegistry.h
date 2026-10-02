@@ -22,8 +22,14 @@ namespace GOAT_SmartObject
         //! Withdraws an entity, releasing any agent still holding a slot on it.
         void Remove(AZ::EntityId entity);
 
-        //! Takes a slot on the nearest entity offering @use within @radius of @from.
-        SmartObjectClaim Claim(GOAT::AgentId agent, const AZ::Name& use, const AZ::Vector3& from, float radius);
+        //! Takes a slot on the nearest entity matching @query.
+        SmartObjectClaim Claim(GOAT::AgentId agent, const SmartObjectQuery& query);
+
+        //! The claim an agent holds, or an invalid one when it holds none.
+        SmartObjectClaim FindClaim(GOAT::AgentId agent) const;
+
+        //! Gives a registered entity a new owner. False when it isn't registered.
+        bool SetOwner(AZ::EntityId entity, const AZ::Name& owner);
 
         //! Gives back whatever slot an agent holds. Safe to call when it holds none.
         void Release(GOAT::AgentId agent);
@@ -41,6 +47,9 @@ namespace GOAT_SmartObject
             //! Agents currently holding a slot. Never longer than the capacity.
             AZStd::vector<GOAT::AgentId> m_users;
         };
+
+        //! True when an object offers what a query asks for, ignoring distance and capacity.
+        static bool Matches(const SmartObjectDescription& description, const SmartObjectQuery& query);
 
         //! The world anchor of an entity, or false when it has no transform to read.
         static bool FindAnchor(AZ::EntityId entity, const AZ::Vector3& offset, AZ::Vector3& outAnchor);

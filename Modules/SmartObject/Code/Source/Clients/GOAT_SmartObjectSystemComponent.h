@@ -38,8 +38,9 @@ namespace GOAT_SmartObject
         //! GOAT_SmartObjectRequestBus
         void RegisterObject(AZ::EntityId entity, SmartObjectDescription description) override;
         void UnregisterObject(AZ::EntityId entity) override;
-        SmartObjectClaim Claim(
-            GOAT::AgentId agent, const AZ::Name& use, const AZ::Vector3& from, float radius) override;
+        SmartObjectClaim Claim(GOAT::AgentId agent, const SmartObjectQuery& query) override;
+        SmartObjectClaim FindClaim(GOAT::AgentId agent) const override;
+        void SetOwner(AZ::EntityId entity, const AZ::Name& owner) override;
         void Release(GOAT::AgentId agent) override;
         AZ::u32 GetFreeSlots(AZ::EntityId entity) const override;
 

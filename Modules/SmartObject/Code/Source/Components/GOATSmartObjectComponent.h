@@ -35,5 +35,11 @@ namespace GOAT_SmartObject
 
         //! How many agents may use it at once.
         AZ::u32 m_capacity = 1;
+
+        //! Labels a claim can require, as in "indoor".
+        AZStd::vector<AZStd::string> m_tags;
+
+        //! Who it belongs to, as in a household. Empty means anyone may use it.
+        AZStd::string m_owner;
     };
 } // namespace GOAT_SmartObject

@@ -23,6 +23,25 @@ namespace GOAT_SmartObject
         AZ::Vector3 m_anchorOffset = AZ::Vector3::CreateZero();
         //! How many agents may use it at once.
         AZ::u32 m_capacity = 1;
+        //! Free-form labels a query can require, as in "indoor".
+        AZStd::vector<AZ::Name> m_tags;
+        //! Who it belongs to, as in a household. Empty means anyone may use it.
+        AZ::Name m_owner;
+    };
+
+    //! What an agent is looking for when it claims a use.
+    struct SmartObjectQuery final
+    {
+        //! The use wanted, as in "sit".
+        AZ::Name m_use;
+        //! Where the agent looks from, in world space.
+        AZ::Vector3 m_from = AZ::Vector3::CreateZero();
+        //! How far it looks, in metres.
+        float m_radius = 0.0f;
+        //! Only objects with this owner, or with no owner at all. Empty accepts any owner.
+        AZ::Name m_owner;
+        //! Only objects carrying every one of these tags.
+        AZStd::vector<AZ::Name> m_requiredTags;
     };
 
     //! What an agent got when it claimed a use. An invalid entity means nothing was free.
@@ -47,10 +66,15 @@ namespace GOAT_SmartObject
         //! Withdraws an entity, releasing any agent still holding a slot on it.
         virtual void UnregisterObject(AZ::EntityId entity) = 0;
 
-        //! Takes a slot on the nearest entity offering @use within @radius of @from.
+        //! Takes a slot on the nearest entity matching @query.
         //! An agent holds at most one claim, so this releases whatever it held before.
-        virtual SmartObjectClaim Claim(
-            GOAT::AgentId agent, const AZ::Name& use, const AZ::Vector3& from, float radius) = 0;
+        virtual SmartObjectClaim Claim(GOAT::AgentId agent, const SmartObjectQuery& query) = 0;
+
+        //! The claim an agent holds, or an invalid one when it holds none.
+        virtual SmartObjectClaim FindClaim(GOAT::AgentId agent) const = 0;
+
+        //! Gives a registered entity a new owner, as when a household moves in. Its users keep their slots.
+        virtual void SetOwner(AZ::EntityId entity, const AZ::Name& owner) = 0;
 
         //! Gives back whatever slot an agent holds. Safe to call when it holds none.
         virtual void Release(GOAT::AgentId agent) = 0;

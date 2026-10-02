@@ -95,7 +95,21 @@ namespace GOAT_SmartObject
         const float radius = context.m_request->m_amount > 0.0f ? context.m_request->m_amount : goat_smartObjectRadius;
         AZ_Assert(radius > 0.0f, "A smart object search radius must be positive");
 
-        const SmartObjectClaim claim = m_registry.Claim(context.m_agent, use, from, radius);
+        SmartObjectQuery query;
+        query.m_use = use;
+        query.m_from = from;
+        query.m_radius = radius;
+
+        // An owner names a variable rather than a value, so one tree serves every household.
+        if (context.m_request->m_targetKey.IsValid())
+        {
+            if (const AZ::Name* owner = context.m_blackboard->Find<AZ::Name>(context.m_request->m_targetKey, context.m_agent))
+            {
+                query.m_owner = *owner;
+            }
+        }
+
+        const SmartObjectClaim claim = m_registry.Claim(context.m_agent, query);
         if (!claim.IsValid())
         {
             return GOAT::ActionResult::Failure;
@@ -113,7 +127,13 @@ namespace GOAT_SmartObject
     void ClaimSmartObjectAction::End([[maybe_unused]] const GOAT::ActionContext& context)
     {
         // The claim deliberately outlives this leaf: the agent still has to travel there.
-        // It is given back by use_smart_object, by the next claim, or when the object goes away.
+        // It is given back by use_smart_object, by the next claim, when the object goes away,
+        // or when the agent does (Forget).
+    }
+
+    void ClaimSmartObjectAction::Forget(GOAT::AgentId agent)
+    {
+        m_registry.Release(agent);
     }
 
     UseSmartObjectAction::UseSmartObjectAction(SmartObjectRegistry& registry, const SmartObjectKeys& keys)

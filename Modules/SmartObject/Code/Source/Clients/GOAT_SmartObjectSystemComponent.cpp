@@ -109,10 +109,14 @@ namespace GOAT_SmartObject
             return false;
         }
 
-        // `claim_smart_object "sit" { radius = 15 }`
+        // `claim_smart_object "sit" { radius = 15, owner = "household" }`
         auto claim = Leaf("claim_smart_object", "Takes a slot on the nearest entity offering a named use");
         claim.m_parameters.push_back(Param("use", GOAT::BlackboardType::Name, true));
         claim.m_parameters.push_back(Param("radius", GOAT::BlackboardType::Float));
+        // Names a blackboard variable holding the owner to look for; its objects and ownerless ones match.
+        GOAT::NodeParameter owner = Param("owner", GOAT::BlackboardType::Name);
+        owner.m_isBlackboardKey = true;
+        claim.m_parameters.push_back(owner);
 
         // `use_smart_object { seconds = 5 }`
         auto use = Leaf("use_smart_object", "Runs the claimed use for a while, then gives the slot back");
@@ -165,8 +169,7 @@ namespace GOAT_SmartObject
         }
     }
 
-    SmartObjectClaim GOAT_SmartObjectSystemComponent::Claim(
-        GOAT::AgentId agent, const AZ::Name& use, const AZ::Vector3& from, float radius)
+    SmartObjectClaim GOAT_SmartObjectSystemComponent::Claim(GOAT::AgentId agent, const SmartObjectQuery& query)
     {
         AZ_Assert(m_registry != nullptr, "Claiming a smart object needs an active registry");
         if (m_registry == nullptr)
@@ -176,7 +179,25 @@ namespace GOAT_SmartObject
             return nothing;
         }
 
-        return m_registry->Claim(agent, use, from, radius);
+        return m_registry->Claim(agent, query);
+    }
+
+    SmartObjectClaim GOAT_SmartObjectSystemComponent::FindClaim(GOAT::AgentId agent) const
+    {
+        if (m_registry == nullptr)
+        {
+            SmartObjectClaim nothing;
+            return nothing;
+        }
+        return m_registry->FindClaim(agent);
+    }
+
+    void GOAT_SmartObjectSystemComponent::SetOwner(AZ::EntityId entity, const AZ::Name& owner)
+    {
+        if (m_registry != nullptr)
+        {
+            m_registry->SetOwner(entity, owner);
+        }
     }
 
     void GOAT_SmartObjectSystemComponent::Release(GOAT::AgentId agent)

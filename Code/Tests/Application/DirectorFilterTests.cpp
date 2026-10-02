@@ -80,6 +80,25 @@ namespace GOAT
         bool Accepts(AgentId, AZ::EntityId) const override { return true; }
     };
 
+    //! A verb that remembers which agents it was told are gone.
+    class ForgetfulAction final : public IActionState
+    {
+    public:
+        AZ_RTTI(ForgetfulAction, "{0D6B2E84-91C7-4F3A-B5E2-7A4C19D83F06}", IActionState);
+        AZ_CLASS_ALLOCATOR(ForgetfulAction, AZ::SystemAllocator);
+
+        explicit ForgetfulAction(AZStd::vector<AgentId>& forgotten)
+            : m_forgotten(forgotten)
+        {
+        }
+
+        AZ::Name GetName() const override { return AZ::Name("forgetful"); }
+        ActionResult Step(const ActionContext&, float) override { return ActionResult::Success; }
+        void Forget(AgentId agent) override { m_forgotten.push_back(agent); }
+
+        AZStd::vector<AgentId>& m_forgotten; //!< Where each forgotten agent is written.
+    };
+
     class DirectorFilterFixture : public UnitTest::LeakDetectionFixture
     {
     protected:
@@ -177,6 +196,22 @@ namespace GOAT
         m_agents->SetBand(agent, ManualBand);
         m_agents->TickBand(0);
         EXPECT_EQ(m_backend.m_decided, 1) << "back on the manual band, the scheduled band leaves it again";
+    }
+
+    //! A verb holding something past End, like a smart object claim, is told when its agent goes.
+    TEST_F(DirectorFilterFixture, Unregister_TellsEveryVerbTheAgentIsGone)
+    {
+        AZStd::vector<AgentId> forgotten;
+        ASSERT_NE(m_actions->Register(AZStd::make_unique<ForgetfulAction>(forgotten)), CoreActions::Invalid);
+
+        const AgentId agent = AddAgent(4);
+        const AgentId other = AddAgent(5);
+        ASSERT_FALSE(agent.IsNull());
+
+        m_agents->Unregister(agent);
+        ASSERT_EQ(forgotten.size(), 1u);
+        EXPECT_EQ(forgotten[0], agent);
+        EXPECT_NE(forgotten[0], other);
     }
 
     //! The whole point of the change: nothing attached means nothing narrowed.

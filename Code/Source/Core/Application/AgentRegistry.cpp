@@ -193,6 +193,10 @@ namespace GOAT
         // the record without this strands every one of them.
         m_runtime.AbortAgent(*record);
 
+        // Some verbs hold things past their own End on purpose (a claim held while the agent
+        // walks there), and only being told the agent is gone gives those back.
+        m_runtime.ForgetAgent(agent);
+
         // After the abort, so a backend is told the agent is gone only once its plan has been
         // given back and nothing can still be running through it.
         m_runtime.ReleaseAgent(*record);

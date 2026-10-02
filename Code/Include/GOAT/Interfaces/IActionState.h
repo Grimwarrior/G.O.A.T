@@ -59,5 +59,11 @@ namespace GOAT
         virtual void End([[maybe_unused]] const ActionContext& context)
         {
         }
+
+        //! Drops whatever this verb still holds for an agent that went away, after its running
+        //! action ended. Optional: only a verb whose effect outlives End, like a claim, needs it.
+        virtual void Forget([[maybe_unused]] AgentId agent)
+        {
+        }
     };
 } // namespace GOAT

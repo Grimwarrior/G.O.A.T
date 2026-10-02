@@ -38,6 +38,9 @@ namespace GOAT
         //! Ends whatever an agent is running and gives back what that action held.
         void AbortAgent(AgentRecord& agent);
 
+        //! Tells every verb an agent is gone, for what a verb holds past its own End.
+        void ForgetAgent(AgentId agent) { m_actions.ForgetAgent(agent); }
+
         //! Builds the context a backend receives.
         PlanContext MakePlanContext(AgentRecord& agent) const;
 
