@@ -5,6 +5,7 @@
 
 #include <GOAT/Domain/AgentId.h>
 
+#include <AzCore/Component/ComponentBus.h>
 #include <AzCore/Component/EntityId.h>
 #include <AzCore/EBus/EBus.h>
 #include <AzCore/Interface/Interface.h>
@@ -93,4 +94,19 @@ namespace GOAT_SmartObject
 
     using GOAT_SmartObjectRequestBus = AZ::EBus<GOAT_SmartObjectRequests, GOAT_SmartObjectBusTraits>;
     using GOAT_SmartObjectInterface = AZ::Interface<GOAT_SmartObjectRequests>;
+
+    //! One smart object's own requests, addressed by its entity.
+    class GOAT_SmartObjectEntityRequests : public AZ::ComponentBus
+    {
+    public:
+        virtual ~GOAT_SmartObjectEntityRequests() = default;
+
+        //! Gives this object a new owner, kept with its component so a saved entity keeps it too.
+        virtual void SetOwner(const AZ::Name& owner) = 0;
+
+        //! Who it belongs to; empty when anyone may use it.
+        virtual AZ::Name GetOwner() const = 0;
+    };
+
+    using GOAT_SmartObjectEntityRequestBus = AZ::EBus<GOAT_SmartObjectEntityRequests>;
 } // namespace GOAT_SmartObject

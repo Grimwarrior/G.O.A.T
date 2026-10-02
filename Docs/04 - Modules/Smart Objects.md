@@ -54,7 +54,9 @@ A claim publishes three variables the rest of your program can read:
 otherwise) and an optional `owner`, which names a blackboard variable holding the owner to look
 for: objects of that owner or of none match, so one program serves every household. Code claims
 with a `SmartObjectQuery` (use, from, radius, owner, required tags), reads an agent's claim with
-`FindClaim` and moves an object to another household with `SetOwner`.
+`FindClaim` and moves an object to another household with `SetOwner`. On an entity with the
+component, `GOAT_SmartObjectEntityRequestBus::SetOwner` also keeps the owner in the component, so
+an entity saved and loaded again belongs to the same household.
 
 `use_smart_object { seconds = N }` holds the slot for N seconds of the agent's ticks, then gives it
 back.

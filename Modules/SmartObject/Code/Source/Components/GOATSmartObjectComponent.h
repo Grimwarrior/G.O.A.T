@@ -1,5 +1,7 @@
 #pragma once
 
+#include <GOAT_SmartObject/GOAT_SmartObjectBus.h>
+
 #include <AzCore/Component/Component.h>
 #include <AzCore/Math/Vector3.h>
 #include <AzCore/std/containers/vector.h>
@@ -13,6 +15,7 @@ namespace GOAT_SmartObject
     //! stand, and how many agents fit. Everything else is the agent's tree.
     class GOATSmartObjectComponent final
         : public AZ::Component
+        , protected GOAT_SmartObjectEntityRequestBus::Handler
     {
     public:
         AZ_COMPONENT_DECL(GOATSmartObjectComponent);
@@ -25,6 +28,10 @@ namespace GOAT_SmartObject
     protected:
         void Activate() override;
         void Deactivate() override;
+
+        //! GOAT_SmartObjectEntityRequestBus
+        void SetOwner(const AZ::Name& owner) override;
+        AZ::Name GetOwner() const override;
 
     private:
         //! What an agent asks for, as in "sit" or "repair". One entity may offer several.

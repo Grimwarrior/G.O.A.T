@@ -111,10 +111,23 @@ namespace GOAT_SmartObject
 
         GOAT_SmartObjectRequestBus::Broadcast(
             &GOAT_SmartObjectRequests::RegisterObject, GetEntityId(), AZStd::move(description));
+        GOAT_SmartObjectEntityRequestBus::Handler::BusConnect(GetEntityId());
+    }
+
+    void GOATSmartObjectComponent::SetOwner(const AZ::Name& owner)
+    {
+        m_owner = owner.GetStringView();
+        GOAT_SmartObjectRequestBus::Broadcast(&GOAT_SmartObjectRequests::SetOwner, GetEntityId(), owner);
+    }
+
+    AZ::Name GOATSmartObjectComponent::GetOwner() const
+    {
+        return m_owner.empty() ? AZ::Name{} : AZ::Name(m_owner);
     }
 
     void GOATSmartObjectComponent::Deactivate()
     {
+        GOAT_SmartObjectEntityRequestBus::Handler::BusDisconnect();
         if (GOAT_SmartObjectInterface::Get() == nullptr)
         {
             return;
