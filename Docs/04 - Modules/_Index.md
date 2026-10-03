@@ -30,6 +30,7 @@ a domain.
 | [[Navigation]] | Movement verbs: `move_to`, `is_at_location`, `does_path_exist`. |
 | [[Smart Objects]] | Props advertising what they can be used for. |
 | [[Animation]] | Verbs for driving animation from a program. |
+| [[Perception]] | Partial. The `.prx` perception profile asset; sensing is still to come. |
 | [[Bark]] | Planned. Trigger-volume based social reactions. |
 
 ---

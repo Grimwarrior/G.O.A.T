@@ -1,0 +1,32 @@
+{
+    "gem_name": "GOAT_Perception",
+    "version": "1.0.0",
+    "display_name": "GOAT_Perception",
+    "license": "Apache-2.0 or MIT",
+    "license_url": "https://github.com/o3de/o3de/blob/development/LICENSE.txt",
+    "origin": "JabbaDaBlack",
+    "origin_url": "https://github.com/jabbadablack",
+    "type": "Code",
+    "summary": "Perception profiles for GOAT agents: a .prx asset describing sight, hearing, awareness and memory.",
+    "canonical_tags": [
+        "Gem"
+    ],
+    "user_tags": [
+        "GOAT_Perception"
+    ],
+    "platforms": [
+        "Windows",
+        "iOS",
+        "Android",
+        "Linux"
+    ],
+    "icon_path": "",
+    "requirements": "Requires the GOAT gem.",
+    "documentation_url": "",
+    "dependencies": [
+        "GOAT"
+    ],
+    "repo_uri": "",
+    "compatible_engines": [],
+    "engine_api_dependencies": []
+}

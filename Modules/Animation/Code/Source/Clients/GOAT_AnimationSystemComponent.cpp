@@ -1,10 +1,13 @@
 #include "GOAT_AnimationSystemComponent.h"
 
 #include <Animation/AnimateAction.h>
+#include <Animation/WaitSignalAction.h>
+#include <Signals/SignalVariables.h>
 
 #include <GOAT_Animation/GOAT_AnimationTypeIds.h>
 
 #include <GOAT/Interfaces/IAgentSystem.h>
+#include <GOAT/Interfaces/IBlackboardSystem.h>
 
 #include <AzCore/Console/ILogger.h>
 #include <AzCore/Name/NameDictionary.h>
@@ -88,9 +91,22 @@ namespace GOAT_Animation
         playMotion.m_parameters.push_back(Param("motion", GOAT::BlackboardType::Name));
         playMotion.m_parameters.push_back(Param("seconds", GOAT::BlackboardType::Float));
 
+        // `wait_signal "window_combo" { timeout = 1.5 }` -- pauses the branch until an animation signal is up.
+        auto waitSignal = Leaf("wait_signal", "Waits until an animation signal variable is true");
+        waitSignal.m_parameters.push_back(Param("key", GOAT::BlackboardType::Bool, true, true));
+        waitSignal.m_parameters.push_back(Param("timeout", GOAT::BlackboardType::Float));
+
+        // The generic signal variables, for a tree that reacts to any signal rather than one it named a binding for.
+        if (GOAT::IBlackboardSystem* blackboard = GOAT::BlackboardSystemInterface::Get())
+        {
+            DeclareAgentVariable(*blackboard, SignalNameVariable(), GOAT::BlackboardType::Name, AZStd::any(AZ::Name()));
+            DeclareAgentVariable(*blackboard, SignalSerialVariable(), GOAT::BlackboardType::Int, AZStd::any(AZ::s64(0)));
+        }
+
         const bool installed =
             m_vocabulary.Install(AZStd::unique_ptr<GOAT::IActionState>(aznew AnimateAction()), AZStd::move(animate)) &&
-            m_vocabulary.Install(AZStd::unique_ptr<GOAT::IActionState>(aznew PlayMotionAction()), AZStd::move(playMotion));
+            m_vocabulary.Install(AZStd::unique_ptr<GOAT::IActionState>(aznew PlayMotionAction()), AZStd::move(playMotion)) &&
+            m_vocabulary.Install(AZStd::unique_ptr<GOAT::IActionState>(aznew WaitSignalAction()), AZStd::move(waitSignal));
 
         AZ_Error("GOAT", installed, "The animation module could not install its full vocabulary");
         return installed;

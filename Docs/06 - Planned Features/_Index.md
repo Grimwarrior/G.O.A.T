@@ -17,6 +17,8 @@ This folder documents **theoretical designs for future modules and systems**. Th
 | [[Navigation Library]] *(superseded — see [[Navigation]])* | Theoretical design for movement actions (`MoveTo`, `Wander`, etc.) as `IActionState`s. |
 | [[Bark System]] | Theoretical design for trigger-volume based social reactions. |
 | [[Perception Module]] | Theoretical design for sensor-based perception via Lua `service` nodes. |
+| [[Perception Params Asset]] *(draft)* | A `.prx` data asset for sight, hearing, awareness and memory, sensed in one batched C++ pass. |
+| [[Animation Signal Hook]] *(draft)* | EMotionFX motion events that open decision windows for guards and `wait_signal`. |
 
 ---
 

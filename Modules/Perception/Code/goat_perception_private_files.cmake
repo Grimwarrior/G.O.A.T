@@ -1,0 +1,31 @@
+
+set(FILES
+    Source/GOAT_PerceptionModuleInterface.cpp
+    Source/GOAT_PerceptionModuleInterface.h
+    Source/Assets/PerceptionProfileAsset.cpp
+    Source/Assets/PerceptionProfileAssetHandler.cpp
+    Source/Assets/PerceptionProfileAssetHandler.h
+    Source/Clients/GOAT_PerceptionSystemComponent.cpp
+    Source/Clients/GOAT_PerceptionSystemComponent.h
+    Source/Components/GOATPerceptionComponent.cpp
+    Source/Components/GOATPerceptionComponent.h
+    Source/Components/GOATPerceivableComponent.cpp
+    Source/Components/GOATPerceivableComponent.h
+    Source/Sensing/AgentSenses.cpp
+    Source/Sensing/AgentSenses.h
+    Source/Sensing/AwarenessMeter.cpp
+    Source/Sensing/AwarenessMeter.h
+    Source/Sensing/HearingModel.cpp
+    Source/Sensing/HearingModel.h
+    Source/Sensing/PerceptionKeys.cpp
+    Source/Sensing/PerceptionKeys.h
+    Source/Sensing/PerceptionPublisher.cpp
+    Source/Sensing/PerceptionPublisher.h
+    Source/Sensing/PerceptionSystem.cpp
+    Source/Sensing/PerceptionSystem.h
+    Source/Sensing/PerceptionWorld.h
+    Source/Sensing/PhysicsPerceptionWorld.cpp
+    Source/Sensing/PhysicsPerceptionWorld.h
+    Source/Sensing/SightGeometry.cpp
+    Source/Sensing/SightGeometry.h
+)

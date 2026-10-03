@@ -5,6 +5,7 @@
 #include <GOAT_Animation/GOAT_AnimationTypeIds.h>
 
 #include <Clients/GOAT_AnimationSystemComponent.h>
+#include <Components/GOATAnimationSignalsComponent.h>
 
 namespace GOAT_Animation
 {
@@ -21,6 +22,7 @@ namespace GOAT_Animation
         // This happens through the [MyComponent]::Reflect() function.
         m_descriptors.insert(m_descriptors.end(), {
             GOAT_AnimationSystemComponent::CreateDescriptor(),
+            GOATAnimationSignalsComponent::CreateDescriptor(),
             });
     }
 

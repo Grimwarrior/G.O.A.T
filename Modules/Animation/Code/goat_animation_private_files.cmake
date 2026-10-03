@@ -6,4 +6,16 @@ set(FILES
     Source/Clients/GOAT_AnimationSystemComponent.h
     Source/Animation/AnimateAction.cpp
     Source/Animation/AnimateAction.h
+    Source/Animation/WaitSignalAction.cpp
+    Source/Animation/WaitSignalAction.h
+    Source/Components/GOATAnimationSignalsComponent.cpp
+    Source/Components/GOATAnimationSignalsComponent.h
+    Source/Signals/ReadyGate.cpp
+    Source/Signals/ReadyGate.h
+    Source/Signals/SignalBinding.cpp
+    Source/Signals/SignalBinding.h
+    Source/Signals/SignalTracker.cpp
+    Source/Signals/SignalTracker.h
+    Source/Signals/SignalVariables.cpp
+    Source/Signals/SignalVariables.h
 )

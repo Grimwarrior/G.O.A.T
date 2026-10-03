@@ -37,6 +37,7 @@
         "Code/Source/Backends/BehaviorTree",
         "Modules/Navigation",
         "Modules/Animation",
-        "Modules/SmartObject"
+        "Modules/SmartObject",
+        "Modules/Perception"
     ]
 }
