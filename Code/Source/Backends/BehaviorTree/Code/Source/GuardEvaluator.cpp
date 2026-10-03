@@ -60,7 +60,43 @@ namespace GOAT
             }
         }
 
+        const AbortDecision expired = EvaluateTimeLimits(program, cursor);
+        if (expired.m_action != AbortAction::None)
+        {
+            return expired;
+        }
+
         return EvaluateParallels(program, leaf, context);
+    }
+
+    AbortDecision GuardEvaluator::EvaluateTimeLimits(const DecisionProgram& program, const DecisionCursor& cursor) const
+    {
+        AbortDecision decision;
+
+        const NodeIndex leaf = cursor.GetActiveLeaf();
+        AZ_Assert(leaf != InvalidNodeIndex, "Time limits are only checked while a leaf is running");
+
+        // Pre-order puts an outer limit before the ones inside it, so the first expired one found is the outermost.
+        for (const NodeIndex limitIndex : program.m_timeLimitNodes)
+        {
+            AZ_Assert(limitIndex < program.m_nodes.size(), "A time limit index must address a node in the program");
+
+            const DecisionNode& limit = program.m_nodes[limitIndex];
+            if (leaf <= limitIndex || leaf >= limit.m_subtreeEnd)
+            {
+                continue;
+            }
+
+            // Same comparison the walker makes when the limited subtree finishes by itself.
+            if (cursor.GetNow() > cursor.GetSlot(limit.m_cursorSlot))
+            {
+                decision.m_action = AbortAction::Fail;
+                decision.m_node = limitIndex;
+                return decision;
+            }
+        }
+
+        return decision;
     }
 
     AbortDecision GuardEvaluator::EvaluateParallels(

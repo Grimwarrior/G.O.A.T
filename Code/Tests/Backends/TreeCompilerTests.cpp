@@ -138,6 +138,41 @@ namespace GOAT
         EXPECT_FALSE(compiled.GetValue().m_watchedScopes[static_cast<size_t>(BlackboardScope::Agent)]);
     }
 
+    //! A deadline passing writes no variable, so the only way a time limit can cut in is if the
+    //! agent is ticked while it runs.
+    TEST_F(TreeCompilerFixture, TimeLimit_IsRecordedAndKeepsTheTreeTicking)
+    {
+        AuthoredNode root = Node("sequence");
+        AuthoredNode limit = Node("time_limit");
+        AuthoredProperty seconds;
+        seconds.m_name = "seconds";
+        seconds.m_value = 5.0;
+        limit.m_properties.push_back(seconds);
+
+        AuthoredNode leaf = Node("wait");
+        seconds.m_value = 30.0;
+        leaf.m_properties.push_back(seconds);
+        limit.m_children.push_back(leaf);
+        root.m_children.push_back(limit);
+
+        const auto compiled = Compile(root);
+        ASSERT_TRUE(compiled.IsSuccess()) << compiled.GetError().c_str();
+
+        ASSERT_EQ(compiled.GetValue().m_timeLimitNodes.size(), 1u);
+        EXPECT_EQ(compiled.GetValue().m_timeLimitNodes[0], 1u);
+        EXPECT_TRUE(compiled.GetValue().m_wantsTick);
+    }
+
+    //! A tree with no time limit stays dormant between changes, as before.
+    TEST_F(TreeCompilerFixture, NoTimeLimit_LeavesTheTreeDormant)
+    {
+        const auto compiled = Compile(GuardedSequence(nullptr));
+        ASSERT_TRUE(compiled.IsSuccess()) << compiled.GetError().c_str();
+
+        EXPECT_TRUE(compiled.GetValue().m_timeLimitNodes.empty());
+        EXPECT_FALSE(compiled.GetValue().m_wantsTick);
+    }
+
     //! A typo used to mean the same as writing nothing, which turned observation off silently.
     TEST_F(TreeCompilerFixture, Condition_RefusesAnAbortModeItDoesNotKnow)
     {

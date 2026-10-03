@@ -44,7 +44,7 @@ is the test that the paradigm really is separable.
 | `force_success` | always succeeds |
 | `loop` | repeats `count` times |
 | `conditional_loop` | repeats while a condition holds |
-| `time_limit` | fails after `seconds` |
+| `time_limit` | fails after `seconds`, cutting off the child's running action rather than waiting for it to finish |
 | `cooldown` | refuses to re-run within `seconds` |
 | `decorator` | a custom decorator, routed to a Lua `flow` |
 

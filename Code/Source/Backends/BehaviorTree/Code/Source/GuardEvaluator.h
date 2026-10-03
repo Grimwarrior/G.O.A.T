@@ -11,7 +11,7 @@ namespace GOAT
     enum class AbortAction : AZ::u8
     {
         None,   //!< Nothing changed that affects this agent.
-        Fail,   //!< A guard around the running branch stopped holding.
+        Fail,   //!< A guard around the running branch stopped holding, or its time limit ran out.
         Restart //!< A higher priority guard started holding, so the walk moves there.
     };
 
@@ -19,7 +19,7 @@ namespace GOAT
     struct AbortDecision final
     {
         AbortAction m_action = AbortAction::None;
-        //! The guard node that caused it.
+        //! The guard, parallel or time limit node that caused it.
         NodeIndex m_node = InvalidNodeIndex;
     };
 
@@ -33,6 +33,9 @@ namespace GOAT
             const DecisionProgram& program, const DecisionCursor& cursor, const PlanContext& context) const;
 
     private:
+        //! Fails the outermost time limit around the running leaf whose deadline has passed.
+        AbortDecision EvaluateTimeLimits(const DecisionProgram& program, const DecisionCursor& cursor) const;
+
         //! Re-checks the background branch of every parallel whose main branch is running.
         AbortDecision EvaluateParallels(
             const DecisionProgram& program, NodeIndex leaf, const PlanContext& context) const;

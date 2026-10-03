@@ -57,6 +57,7 @@ bool IsEmpty() const { return m_nodes.empty(); }
 | `m_observedKeys` | `AZStd::vector<BlackboardKey>` | Every blackboard slot a guard observes, deduplicated. |
 | `m_guardNodes` | `AZStd::vector<NodeIndex>` | Nodes that declared an abort mode. |
 | `m_serviceNodes` | `AZStd::vector<NodeIndex>` | Nodes that carry services. |
+| `m_timeLimitNodes` | `AZStd::vector<NodeIndex>` | `time_limit` nodes, so [[GuardEvaluator]] can cut off a running leaf whose deadline passed. A tree with any sets `m_wantsTick`. |
 | `m_depth` | `AZ::u32` | Deepest path in this tree, checked against `MaxTreeDepth`. |
 
 ---

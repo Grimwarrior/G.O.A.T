@@ -44,7 +44,8 @@ guards on, so a write anywhere else never wakes an agent running it. [[GuardWatc
 an agent connects. A program that guards on nothing is never woken by a write at all.
 
 **`m_wantsTick`** is the opt-out: true when the program needs a call every tick regardless, not
-only when a watched slot changed. Services need this; a plain reactive tree does not.
+only when a watched slot changed. Services and `time_limit` nodes need this, because a deadline
+passing writes no variable; a plain reactive tree does not.
 
 **`m_boundSlots`** records which subtree slots the program was compiled against, deduplicated.
 The compiler that resolved them is the only thing that knows, and rebinding a slot has to find

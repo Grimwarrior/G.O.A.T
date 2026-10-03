@@ -684,6 +684,16 @@ namespace GOAT
         // Services need a beat of their own, so a tree with any is never left dormant.
         program.m_wantsTick = program.m_wantsTick || !program.m_services.empty();
 
+        // A deadline passing changes no variable, so a tree with a time limit is never left dormant or the limit could not cut in.
+        for (NodeIndex i = 0; i < program.m_nodes.size(); ++i)
+        {
+            if (program.m_nodes[i].m_op == NodeOp::TimeLimit)
+            {
+                program.m_timeLimitNodes.push_back(i);
+            }
+        }
+        program.m_wantsTick = program.m_wantsTick || !program.m_timeLimitNodes.empty();
+
         for (const BlackboardKey key : program.m_observedKeys)
         {
             program.m_watchedScopes[static_cast<size_t>(key.GetScope())] = true;

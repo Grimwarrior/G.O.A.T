@@ -25,6 +25,7 @@ tags: [cpp, core, component]
 | 1 | **Guard Evaluation** | Checks all guard nodes in a program against the current blackboard state. |
 | 2 | **Abort Decision** | Determines whether a running action should be interrupted, and whether it should `Fail` or `Restart`. |
 | 3 | **Scope Detection** | Uses pre-order indices to determine whether a leaf is inside a guard's subtree or a lower-priority branch. |
+| 4 | **Time Limits** | Fails the outermost `time_limit` around the running leaf once its deadline has passed, so a long action is cut off instead of finishing late. |
 
 ---
 
@@ -46,14 +47,14 @@ AbortDecision Evaluate(
 enum class AbortAction : AZ::u8
 {
     None,   //!< Nothing changed that affects this agent.
-    Fail,   //!< A guard around the running branch stopped holding.
+    Fail,   //!< A guard around the running branch stopped holding, or its time limit ran out.
     Restart //!< A higher priority guard started holding, so the walk moves there.
 };
 
 struct AbortDecision
 {
     AbortAction m_action = AbortAction::None;
-    NodeIndex m_node = InvalidNodeIndex;
+    NodeIndex m_node = InvalidNodeIndex; //!< The guard, parallel or time limit that caused it.
 };
 ```
 
@@ -121,6 +122,8 @@ AbortDecision GuardEvaluator::Evaluate(...) const
     return decision;
 }
 ```
+
+After the guards, `EvaluateTimeLimits()` scans `program.m_timeLimitNodes` in pre-order. A limit applies when the running leaf is inside its subtree and the cursor clock has passed the deadline the walker stored in its slot when it entered the limit. The first one found is the outermost, and it returns `AbortAction::Fail` with the limit's index, so the walk resumes as that limit failing. Because a deadline passing changes no variable, the compiler sets `m_wantsTick` on any tree with a `time_limit`, which is what gets this called while a leaf runs.
 
 ### Performance Considerations
 

@@ -108,6 +108,8 @@ namespace GOAT
         AZStd::vector<NodeIndex> m_serviceNodes;
         //! Parallel nodes, so re-checking their background branches scans only those.
         AZStd::vector<NodeIndex> m_parallelNodes;
+        //! Time limit nodes, so re-checking deadlines scans only those.
+        AZStd::vector<NodeIndex> m_timeLimitNodes;
         //! Cursor slots this tree needs, and where the run of one slot per service starts.
         AZ::u16 m_cursorSlotCount = 0;
         AZ::u16 m_serviceSlotBase = 0;

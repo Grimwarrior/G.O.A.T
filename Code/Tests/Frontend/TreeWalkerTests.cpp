@@ -288,4 +288,103 @@ namespace GOAT
         const GuardEvaluator evaluator;
         EXPECT_EQ(evaluator.Evaluate(program, cursor, Context()).m_action, AbortAction::None);
     }
+
+    //! A time limit cuts off the leaf it wraps once the deadline passes, instead of waiting for
+    //! that leaf to finish. The walk then resumes at the limit as a failure and takes the fallback.
+    TEST_F(TreeWalkerFixture, TimeLimit_FailsTheRunningLeafOncePastItsDeadline)
+    {
+        DecisionProgram program;
+        program.m_name = AZ::Name("Test");
+        const NodeIndex root = Add(program, NodeOp::Selector, InvalidNodeIndex);
+        const NodeIndex limit = Add(program, NodeOp::TimeLimit, root);
+        const NodeIndex body = Add(program, NodeOp::Action, limit);
+        const NodeIndex fallback = Add(program, NodeOp::Action, root);
+        Finish(program);
+
+        program.m_nodes[limit].m_amount = 5.0f;
+        program.m_nodes[limit].m_cursorSlot = 0;
+        program.m_timeLimitNodes.push_back(limit);
+        program.m_cursorSlotCount = 1;
+
+        DecisionCursor cursor;
+        cursor.Reset(program);
+        ASSERT_EQ(m_walker.Begin(program, cursor, Context()).m_outcome, WalkOutcome::Intent);
+        ASSERT_EQ(cursor.GetActiveLeaf(), body);
+
+        const GuardEvaluator evaluator;
+        cursor.AdvanceClock(4.9f);
+        EXPECT_EQ(evaluator.Evaluate(program, cursor, Context()).m_action, AbortAction::None);
+
+        cursor.AdvanceClock(0.2f);
+        const AbortDecision decision = evaluator.Evaluate(program, cursor, Context());
+        EXPECT_EQ(decision.m_action, AbortAction::Fail);
+        EXPECT_EQ(decision.m_node, limit);
+
+        // What the backend does with a Fail: park the walk on the node and report a failure.
+        cursor.SetActiveLeaf(decision.m_node);
+        const WalkStep next = m_walker.Advance(program, cursor, Context(), ActionResult::Failure);
+        ASSERT_EQ(next.m_outcome, WalkOutcome::Intent);
+        EXPECT_EQ(cursor.GetActiveLeaf(), fallback);
+    }
+
+    //! With limits nested, the outermost one that ran out is the one that fails, because failing
+    //! only the inner one would leave the outer branch running past its own deadline.
+    TEST_F(TreeWalkerFixture, TimeLimit_FailsTheOutermostLimitThatRanOut)
+    {
+        DecisionProgram program;
+        program.m_name = AZ::Name("Test");
+        const NodeIndex root = Add(program, NodeOp::Sequence, InvalidNodeIndex);
+        const NodeIndex outer = Add(program, NodeOp::TimeLimit, root);
+        const NodeIndex inner = Add(program, NodeOp::TimeLimit, outer);
+        Add(program, NodeOp::Action, inner);
+        Finish(program);
+
+        program.m_nodes[outer].m_amount = 10.0f;
+        program.m_nodes[outer].m_cursorSlot = 0;
+        program.m_nodes[inner].m_amount = 2.0f;
+        program.m_nodes[inner].m_cursorSlot = 1;
+        program.m_timeLimitNodes.push_back(outer);
+        program.m_timeLimitNodes.push_back(inner);
+        program.m_cursorSlotCount = 2;
+
+        DecisionCursor cursor;
+        cursor.Reset(program);
+        ASSERT_EQ(m_walker.Begin(program, cursor, Context()).m_outcome, WalkOutcome::Intent);
+
+        const GuardEvaluator evaluator;
+        cursor.AdvanceClock(3.0f);
+        EXPECT_EQ(evaluator.Evaluate(program, cursor, Context()).m_node, inner);
+
+        cursor.AdvanceClock(8.0f);
+        EXPECT_EQ(evaluator.Evaluate(program, cursor, Context()).m_node, outer);
+    }
+
+    //! A limit only reaches the leaf inside it. One running on another branch is untouched, however late the clock is.
+    TEST_F(TreeWalkerFixture, TimeLimit_LeavesARunningLeafOutsideItAlone)
+    {
+        const BlackboardKey gate = DeclareBool("gate", false);
+
+        DecisionProgram program;
+        program.m_name = AZ::Name("Test");
+        const NodeIndex root = Add(program, NodeOp::Selector, InvalidNodeIndex);
+        const NodeIndex limit = Add(program, NodeOp::TimeLimit, root);
+        const NodeIndex closed = Add(program, NodeOp::Condition, limit);
+        const NodeIndex outside = Add(program, NodeOp::Action, root);
+        Finish(program);
+
+        program.m_nodes[closed].m_key = gate;
+        program.m_nodes[limit].m_amount = 3.0f;
+        program.m_nodes[limit].m_cursorSlot = 0;
+        program.m_timeLimitNodes.push_back(limit);
+        program.m_cursorSlotCount = 1;
+
+        DecisionCursor cursor;
+        cursor.Reset(program);
+        ASSERT_EQ(m_walker.Begin(program, cursor, Context()).m_outcome, WalkOutcome::Intent);
+        ASSERT_EQ(cursor.GetActiveLeaf(), outside);
+
+        cursor.AdvanceClock(100.0f);
+        const GuardEvaluator evaluator;
+        EXPECT_EQ(evaluator.Evaluate(program, cursor, Context()).m_action, AbortAction::None);
+    }
 } // namespace GOAT
