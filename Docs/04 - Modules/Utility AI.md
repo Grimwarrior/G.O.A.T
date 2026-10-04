@@ -99,6 +99,9 @@ return utility "ExampleChoices" {
 }
 ```
 
+The `considered` table is reused for the next call as soon as the scorer returns, so read from it
+and copy any value you want to keep rather than holding on to the table.
+
 A choice's body is a **plan**, not a tree: its steps run in order and the first failure ends it.
 That is why `sequence` and `selector` are refused inside one — they are shapes a tree walks, and
 a choice reaches a tree by embedding it.

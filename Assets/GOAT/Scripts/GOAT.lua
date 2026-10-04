@@ -240,6 +240,33 @@ function GOAT._stateFor(agentKey, behaviorName)
     return state
 end
 
+-- The names flows and backends keep their scratch under are built once, not on every call, because
+-- joining strings in the middle of a tick leaves a new string for the collector each time.
+local flowStateKeys = {}
+local function flowStateKey(flowName, nodeKey)
+    local perFlow = flowStateKeys[flowName]
+    if perFlow == nil then
+        perFlow = {}
+        flowStateKeys[flowName] = perFlow
+    end
+    local key = perFlow[nodeKey]
+    if key == nil then
+        key = "flow:" .. flowName .. ":" .. nodeKey
+        perFlow[nodeKey] = key
+    end
+    return key
+end
+
+local backendStateKeys = {}
+local function backendStateKey(backendName)
+    local key = backendStateKeys[backendName]
+    if key == nil then
+        key = "backend:" .. backendName
+        backendStateKeys[backendName] = key
+    end
+    return key
+end
+
 --! Drops every scratch table an agent owned, called when the agent goes away.
 --! Exposed as a plain global because C++ looks functions up with lua_getglobal, which
 --! does not resolve a dotted name.
@@ -279,6 +306,9 @@ end
 --! Runs one phase of a behaviour whose answer is a number rather than a status.
 --! Returns the number and true, or zero and false when there was nothing to ask: a behaviour
 --! answering zero and one that is not there mean different things, and only one is a mistake.
+local measureValues = {}
+local measureValueCount = 0
+
 function GOAT_Measure(behaviorName, phase, agentKey, ctx, ...)
     local body = GOAT._behaviors[behaviorName]
     local fn = body ~= nil and body[phase] or nil
@@ -287,7 +317,19 @@ function GOAT_Measure(behaviorName, phase, agentKey, ctx, ...)
     end
 
     local state = GOAT._stateFor(agentKey, behaviorName)
-    local measured = fn(state, ctx, { ... })
+
+    -- One table is refilled for every call rather than building a new one, since a scorer runs
+    -- once per choice per pass. It is only good for the length of the call.
+    local count = select("#", ...)
+    for i = 1, count do
+        measureValues[i] = (select(i, ...))
+    end
+    for i = count + 1, measureValueCount do
+        measureValues[i] = nil
+    end
+    measureValueCount = count
+
+    local measured = fn(state, ctx, measureValues)
     if type(measured) ~= "number" then
         return 0, false
     end
@@ -374,7 +416,7 @@ function GOAT_Plan(backendName, agentKey, ctx, goal, builder)
         return false
     end
 
-    local state = GOAT._stateFor(agentKey, "backend:" .. backendName)
+    local state = GOAT._stateFor(agentKey, backendStateKey(backendName))
 
     -- A backend may hand back a list of steps, or drive the builder itself. The second form is
     -- what lets a backend whose steps are already baked name one instead of pushing it again.
@@ -484,7 +526,7 @@ function GOAT_FlowBegin(flowName, agentKey, ctx, nodeKey, childCount)
         return -1, FAILURE
     end
 
-    local state = GOAT._stateFor(agentKey, "flow:" .. flowName .. ":" .. nodeKey)
+    local state = GOAT._stateFor(agentKey, flowStateKey(flowName, nodeKey))
     local child, status = body.start(state, ctx, childCount)
     if type(child) ~= "number" then
         return -1, status or SUCCESS
@@ -499,7 +541,7 @@ function GOAT_FlowAdvance(flowName, agentKey, ctx, nodeKey, childIndex, childSta
         return -1, childStatus
     end
 
-    local state = GOAT._stateFor(agentKey, "flow:" .. flowName .. ":" .. nodeKey)
+    local state = GOAT._stateFor(agentKey, flowStateKey(flowName, nodeKey))
     local child, status = body.result(state, ctx, childIndex + 1, childStatus)
     if type(child) ~= "number" then
         return -1, status or childStatus
@@ -514,7 +556,7 @@ function GOAT_FlowFilter(flowName, agentKey, ctx, nodeKey, childStatus)
         return childStatus
     end
 
-    local state = GOAT._stateFor(agentKey, "flow:" .. flowName .. ":" .. nodeKey)
+    local state = GOAT._stateFor(agentKey, flowStateKey(flowName, nodeKey))
     local status = body.result(state, ctx, childStatus)
     if type(status) ~= "number" then
         return childStatus

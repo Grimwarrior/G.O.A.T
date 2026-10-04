@@ -159,8 +159,8 @@ namespace GOAT
             return ActionResult::Failure;
         }
 
-        call.PushArg(AZStd::string(behavior.GetStringView()));
-        call.PushArg(AZStd::string(phase));
+        call.PushArg(behavior.GetCStr());
+        call.PushArg(phase);
         call.PushArg(AgentKey(agent));
         call.PushArg(context);
         call.PushArg(static_cast<double>(deltaTime));
@@ -194,7 +194,7 @@ namespace GOAT
             return false;
         }
 
-        call.PushArg(AZStd::string(behavior.GetStringView()));
+        call.PushArg(behavior.GetCStr());
 
         if (!call.CallExecute() || call.GetNumResults() < 1)
         {
@@ -224,8 +224,8 @@ namespace GOAT
             return false;
         }
 
-        call.PushArg(AZStd::string(behavior.GetStringView()));
-        call.PushArg(AZStd::string(phase));
+        call.PushArg(behavior.GetCStr());
+        call.PushArg(phase);
         call.PushArg(AgentKey(agent));
         call.PushArg(context);
 
@@ -349,10 +349,10 @@ namespace GOAT
             return nullptr;
         }
 
-        call.PushArg(AZStd::string(backend.GetStringView()));
+        call.PushArg(backend.GetCStr());
         call.PushArg(AgentKey(agent));
         call.PushArg(context);
-        call.PushArg(AZStd::string(goal.GetStringView()));
+        call.PushArg(goal.GetCStr());
         call.PushArg(m_planBuilder);
 
         if (!call.CallExecute())
@@ -389,7 +389,7 @@ namespace GOAT
             return NoChild;
         }
 
-        call.PushArg(AZStd::string(flow.GetStringView()));
+        call.PushArg(flow.GetCStr());
         call.PushArg(AgentKey(agent));
         call.PushArg(context);
         call.PushArg(static_cast<double>(node));
@@ -435,7 +435,7 @@ namespace GOAT
             return NoChild;
         }
 
-        call.PushArg(AZStd::string(flow.GetStringView()));
+        call.PushArg(flow.GetCStr());
         call.PushArg(AgentKey(agent));
         call.PushArg(context);
         call.PushArg(static_cast<double>(node));
@@ -470,7 +470,7 @@ namespace GOAT
             return childResult;
         }
 
-        call.PushArg(AZStd::string(flow.GetStringView()));
+        call.PushArg(flow.GetCStr());
         call.PushArg(AgentKey(agent));
         call.PushArg(context);
         call.PushArg(static_cast<double>(node));
