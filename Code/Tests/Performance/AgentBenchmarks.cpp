@@ -459,13 +459,21 @@ namespace GOAT::Benchmark
 
         //! The same population, but every condition is watched and one of them reads a global
         //! variable. This is what a tree costs now that writing a condition means observing it.
-        void MakeReactiveArchetype()
+        //!
+        //! With @p listKeys the program names the variables it guards on, as a compiled one does,
+        //! so only a write to one of those wakes it. Without, it watches whole scopes, so any write
+        //! in them does. With @p waits the running step sleeps for a second, so an agent that nothing
+        //! wakes costs almost nothing, which is what lets the two be told apart.
+        void MakeReactiveArchetype(bool listKeys = false, bool waits = false)
         {
             m_alarm = m_blackboard->Declare(AZ::Name("alarm"), BlackboardScope::Global, BlackboardType::Bool)
                           .GetValue();
+            m_unrelated = m_blackboard->Declare(AZ::Name("unrelated"), BlackboardScope::Global, BlackboardType::Bool)
+                              .GetValue();
             BuildProgram(8);
 
-            const ActionStateId busy = m_actions->Register(AZStd::make_unique<BusyAction>());
+            const ActionStateId busy = waits ? m_actions->Register(AZStd::make_unique<WaitingAction>())
+                                             : m_actions->Register(AZStd::make_unique<BusyAction>());
             for (DecisionNode& node : m_program->m_nodes)
             {
                 if (node.m_op == NodeOp::Action)
@@ -486,8 +494,17 @@ namespace GOAT::Benchmark
 
             auto shared = AZStd::shared_ptr<DecisionProgram>(aznew DecisionProgram(*m_program));
             shared->m_backend = m_treeBackend.get();
-            shared->m_watchedScopes[static_cast<size_t>(BlackboardScope::Agent)] = true;
-            shared->m_watchedScopes[static_cast<size_t>(BlackboardScope::Global)] = true;
+            if (listKeys)
+            {
+                shared->WatchKey(m_alarm);
+                shared->WatchKey(m_gate);
+                shared->WatchKey(m_closed);
+            }
+            else
+            {
+                shared->m_watchedScopes[static_cast<size_t>(BlackboardScope::Agent)] = true;
+                shared->m_watchedScopes[static_cast<size_t>(BlackboardScope::Global)] = true;
+            }
             auto archetype = AZStd::shared_ptr<AgentArchetype>(aznew AgentArchetype());
             archetype->Add(AZ::Name("Bench"), AZStd::move(shared));
             m_archetype = archetype;
@@ -634,6 +651,7 @@ namespace GOAT::Benchmark
         AZStd::vector<BlackboardKey> m_scored;
         AZStd::unique_ptr<AgentRuntime> m_runtime;
         BlackboardKey m_alarm;
+        BlackboardKey m_unrelated;
         AZStd::unique_ptr<AgentRegistry> m_registry;
         EmbedAction::ProgramTable m_library;
     };
@@ -910,6 +928,60 @@ namespace GOAT::Benchmark
     }
 
     BENCHMARK_REGISTER_F(AgentRegistryBenchmarkFixture, BM_GlobalWriteReactive)->Arg(100)->Arg(1000)->Arg(10000);
+
+    //! Writes one global variable and ticks a population, where the variable written is either one
+    //! every agent guards on or one none of them do. The point of listing guarded variables is that
+    //! the second case stops waking anybody, so what matters is the gap between the four.
+    //!
+    //! Arg 1 is whether the program lists its variables, arg 2 whether the write is to one it guards.
+    BENCHMARK_DEFINE_F(AgentRegistryBenchmarkFixture, BM_GlobalWriteWake)(::benchmark::State& state)
+    {
+        const int agents = static_cast<int>(state.range(0));
+        const bool listed = state.range(1) != 0;
+        const bool guarded = state.range(2) != 0;
+        MakeReactiveArchetype(listed, true);
+        m_registry->Reserve(static_cast<size_t>(agents), 0);
+
+        AZStd::vector<AgentId> registered;
+        registered.reserve(static_cast<size_t>(agents));
+        for (int i = 0; i < agents; ++i)
+        {
+            registered.push_back(
+                m_registry->Register(AZ::EntityId(static_cast<AZ::u64>(i) + 1), m_archetype, 0, AZ::Name{}));
+        }
+
+        for (const AgentId agent : registered)
+        {
+            m_blackboard->Set<bool>(m_gate, true, agent);
+        }
+
+        // Settled before measuring, so a tick that finds nothing changed really is a quiet one.
+        m_registry->TickBand(0);
+        m_registry->TickBand(0);
+        m_registry->TickBand(0);
+
+        const BlackboardKey written = guarded ? m_alarm : m_unrelated;
+        bool value = false;
+        for ([[maybe_unused]] auto _ : state)
+        {
+            value = !value;
+            m_blackboard->Set<bool>(written, value);
+            m_registry->TickBand(0);
+        }
+
+        state.SetItemsProcessed(state.iterations() * agents);
+    }
+
+    BENCHMARK_REGISTER_F(AgentRegistryBenchmarkFixture, BM_GlobalWriteWake)
+        ->ArgNames({ "agents", "listed", "guarded" })
+        ->Args({ 1000, 0, 1 })
+        ->Args({ 1000, 1, 1 })
+        ->Args({ 1000, 0, 0 })
+        ->Args({ 1000, 1, 0 })
+        ->Args({ 10000, 0, 1 })
+        ->Args({ 10000, 1, 1 })
+        ->Args({ 10000, 0, 0 })
+        ->Args({ 10000, 1, 0 });
 
     //! The same, told up front how many are coming.
     BENCHMARK_DEFINE_F(AgentRegistryBenchmarkFixture, BM_RegisterAgentsReserved)(::benchmark::State& state)
