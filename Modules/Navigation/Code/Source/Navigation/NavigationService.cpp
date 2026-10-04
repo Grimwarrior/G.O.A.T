@@ -6,6 +6,7 @@
 
 #include <RecastNavigation/RecastHelpers.h>
 
+#include <DetourNavMesh.h>
 #include <DetourNavMeshQuery.h>
 
 namespace GOAT_Navigation
@@ -157,6 +158,21 @@ namespace GOAT_Navigation
             return;
         }
 
+        {
+            int tiles = 0;
+            int polygons = 0;
+            for (int i = 0; i < m_navMesh->getMaxTiles(); ++i)
+            {
+                const dtMeshTile* tile = static_cast<const dtNavMesh*>(m_navMesh)->getTile(i);
+                if (tile != nullptr && tile->header != nullptr)
+                {
+                    ++tiles;
+                    polygons += tile->header->polyCount;
+                }
+            }
+            AZLOG(GoatNav, "GOAT bound to a navigation mesh with %d tile(s) holding %d polygon(s)", tiles, polygons);
+        }
+
         for (Worker& worker : m_workers)
         {
             if (worker.m_query == nullptr)
@@ -181,6 +197,7 @@ namespace GOAT_Navigation
         AZ_Assert(navigationMeshEntity == m_navMeshEntity,
             "A navigation notification arrived for an entity this service is not bound to");
 
+        AZLOG(GoatNav, "GOAT navigation mesh began rebuilding; path queries fail until it finishes");
         m_recalculating = true;
         m_recalculatingSince = AZ::GetElapsedTimeMs();
 
@@ -198,6 +215,7 @@ namespace GOAT_Navigation
         AZ_Assert(navigationMeshEntity == m_navMeshEntity,
             "A navigation notification arrived for an entity this service is not bound to");
 
+        AZLOG(GoatNav, "GOAT navigation mesh finished rebuilding");
         m_recalculating = false;
 
         // The mesh object itself may have been replaced, so re-fetch and re-init rather than reuse.
@@ -334,6 +352,7 @@ namespace GOAT_Navigation
         const auto found = m_requests.find(id);
         if (found == m_requests.end())
         {
+            AZLOG(GoatNav, "GOAT path request %u was removed while its query ran", id);
             return;
         }
 
@@ -344,6 +363,7 @@ namespace GOAT_Navigation
         // Cancelled while this ran: keep it cancelled and let Update reap it.
         if (request.m_status == PathStatus::Cancelled)
         {
+            AZLOG(GoatNav, "GOAT path request %u was cancelled while its query ran", id);
             return;
         }
 
@@ -361,6 +381,9 @@ namespace GOAT_Navigation
         outStatus = PathStatus::NotFound;
         if (m_navMesh == nullptr || !worker.m_initialised || worker.m_query == nullptr)
         {
+            AZLOG(GoatNav, "GOAT path query refused: mesh %s, worker %s, query object %s",
+                m_navMesh != nullptr ? "bound" : "NOT bound", worker.m_initialised ? "ready" : "NOT initialised",
+                worker.m_query != nullptr ? "present" : "MISSING");
             return;
         }
 
@@ -382,16 +405,22 @@ namespace GOAT_Navigation
 
         if (startPoly == 0 || endPoly == 0)
         {
+            AZLOG(GoatNav, "GOAT path query found no polygon near its %s (from %.1f %.1f %.1f to %.1f %.1f %.1f, search extent %.1f)",
+                startPoly == 0 ? (endPoly == 0 ? "start and end" : "start") : "end", static_cast<double>(from.GetX()),
+                static_cast<double>(from.GetY()), static_cast<double>(from.GetZ()), static_cast<double>(to.GetX()),
+                static_cast<double>(to.GetY()), static_cast<double>(to.GetZ()), static_cast<double>(PolygonSearchExtents));
             return;
         }
 
         dtPolyRef polygons[MaxPathPolygons] = {};
         int polygonCount = 0;
-        worker.m_query->findPath(
+        const dtStatus pathStatus = worker.m_query->findPath(
             startPoly, endPoly, nearestStart.m_xyz, nearestEnd.m_xyz, &filter, polygons, &polygonCount, MaxPathPolygons);
 
         if (polygonCount <= 0)
         {
+            AZLOG(GoatNav, "GOAT path query found polygons at both ends but no route between them (status 0x%x)",
+                static_cast<unsigned>(pathStatus));
             return;
         }
 
@@ -403,6 +432,7 @@ namespace GOAT_Navigation
 
         if (pointCount <= 0)
         {
+            AZLOG(GoatNav, "GOAT path query routed %d polygons but produced no waypoints", polygonCount);
             return;
         }
 
