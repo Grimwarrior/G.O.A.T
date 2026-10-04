@@ -77,6 +77,8 @@ namespace GOAT
 
         //! Which pacing band this agent belongs to, which is its level of detail.
         AZ::u8 m_band = 0;
+        //! Where this agent sits in its band's roster, so leaving the band needs no search.
+        AZ::u32 m_bandSlot = 0;
 
         //! A tree change asked for while the agent was mid tick, applied at the top of the next
         //! one. Switching in place would rewrite the program Tick is holding a reference into.

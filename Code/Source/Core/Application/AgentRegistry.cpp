@@ -123,13 +123,17 @@ namespace GOAT
             return;
         }
 
-        Band& entry = m_bands[band];
-        if (entry.m_ticking)
+        AgentRecord* record = Find(agent);
+        AZ_Assert(record != nullptr, "Only a registered agent can join a band");
+        if (record == nullptr)
         {
-            entry.m_joining.push_back(agent);
             return;
         }
 
+        // Added straight away even mid tick: the walk is bounded by the roster's size when it
+        // began, so a newcomer first runs on the next tick.
+        Band& entry = m_bands[band];
+        record->m_bandSlot = static_cast<AZ::u32>(entry.m_members.size());
         entry.m_members.push_back(agent);
     }
 
@@ -141,40 +145,71 @@ namespace GOAT
             return;
         }
 
-        Band& entry = m_bands[band];
-        if (entry.m_ticking)
+        AgentRecord* record = Find(agent);
+        AZ_Assert(record != nullptr, "Only a registered agent can leave a band");
+        if (record == nullptr)
         {
-            entry.m_leaving.push_back(agent);
             return;
         }
 
+        Band& entry = m_bands[band];
         auto& members = entry.m_members;
-        members.erase(AZStd::remove(members.begin(), members.end(), agent), members.end());
+        const size_t slot = record->m_bandSlot;
+        AZ_Assert(slot < members.size() && members[slot] == agent, "An agent must be listed where it says it is");
+        if (slot >= members.size() || members[slot] != agent)
+        {
+            return;
+        }
 
-        AZ_Assert(AZStd::find(members.begin(), members.end(), agent) == members.end(),
-            "Removing an agent from a band must leave no copy of it there");
+        if (entry.m_ticking)
+        {
+            members[slot] = AgentId{};
+            ++entry.m_vacated;
+            return;
+        }
+
+        // The last agent takes the vacated place, so nothing else shifts.
+        const AgentId last = members.back();
+        members[slot] = last;
+        members.pop_back();
+        if (last != agent)
+        {
+            if (AgentRecord* moved = Find(last))
+            {
+                moved->m_bandSlot = static_cast<AZ::u32>(slot);
+            }
+        }
     }
 
     void AgentRegistry::FlushBandChanges(size_t band)
     {
         Band& entry = m_bands[band];
-        AZ_Assert(!entry.m_ticking, "Queued membership changes are applied once the band's tick has ended");
-
-        // Removals first, so an agent that left and rejoined in one tick ends up present rather
-        // than being erased by its own earlier departure.
-        for (const AgentId agent : entry.m_leaving)
+        AZ_Assert(!entry.m_ticking, "Gaps are closed once the band's tick has ended");
+        if (entry.m_vacated == 0)
         {
-            auto& members = entry.m_members;
-            members.erase(AZStd::remove(members.begin(), members.end(), agent), members.end());
+            return;
         }
 
-        for (const AgentId agent : entry.m_joining)
+        auto& members = entry.m_members;
+        size_t kept = 0;
+        for (size_t i = 0; i < members.size(); ++i)
         {
-            entry.m_members.push_back(agent);
+            const AgentId agent = members[i];
+            if (agent.IsNull())
+            {
+                continue;
+            }
+
+            members[kept] = agent;
+            if (AgentRecord* record = Find(agent))
+            {
+                record->m_bandSlot = static_cast<AZ::u32>(kept);
+            }
+            ++kept;
         }
 
-        entry.m_leaving.clear();
-        entry.m_joining.clear();
+        members.resize(kept);
+        entry.m_vacated = 0;
     }
 
     void AgentRegistry::Unregister(AgentId agent)
@@ -444,10 +479,11 @@ namespace GOAT
 
         AZ_Assert(deltaTime >= 0.0f, "A band's delta time must never run backwards");
 
-        // Walked in place. A behaviour that registers or removes an agent has its change queued
-        // rather than applied, so the roster cannot move under this loop and nothing is copied.
+        // Walked in place. An agent removed mid tick is blanked and one added goes on the end, past
+        // the count taken here, so the roster cannot shift under this loop and nothing is copied.
         entry.m_ticking = true;
-        for (size_t i = 0; i < entry.m_members.size(); ++i)
+        const size_t count = entry.m_members.size();
+        for (size_t i = 0; i < count; ++i)
         {
             if (AgentRecord* record = Find(entry.m_members[i]))
             {

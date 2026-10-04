@@ -111,10 +111,10 @@ namespace GOAT
         //! Re-arms an agent's guards against the storages that exist now.
         void ReconnectObserver(AgentRecord& record);
 
-        //! Puts an agent on a band, or queues it when that band is mid tick.
+        //! Puts an agent at the end of a band's roster.
         void AddToBand(AgentId agent, size_t band);
 
-        //! Applies every membership change queued while a band was ticking.
+        //! Closes the gaps left in a band's roster by agents that left while it was ticking.
         void FlushBandChanges(size_t band);
 
         //! One pacing band: an interval, the agents on it, and its scheduler entry.
@@ -125,12 +125,10 @@ namespace GOAT
             AZStd::vector<AgentId> m_members;
             AZStd::unique_ptr<AZ::ScheduledEvent> m_event;
 
-            //! Membership changes asked for while this band was mid tick, applied once it ends.
-            //! Deferring them is what lets the tick walk the roster in place: a behaviour may
-            //! register or remove an agent, and doing that to the vector being walked would
-            //! invalidate it. Copying the roster every tick was the previous answer.
-            AZStd::vector<AgentId> m_joining;
-            AZStd::vector<AgentId> m_leaving;
+            //! Agents that left while this band was mid tick. Their place is blanked rather than
+            //! erased, because the tick walks the roster in place and erasing would move the agents
+            //! it has yet to reach; the gaps are closed once it ends.
+            size_t m_vacated = 0;
             bool m_ticking = false;
         };
 
