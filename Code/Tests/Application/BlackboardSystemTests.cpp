@@ -1,4 +1,5 @@
 #include <Core/Application/BlackboardSystem.h>
+#include <Core/Application/GuardWatch.h>
 
 #include <AzCore/Name/NameDictionary.h>
 #include <AzCore/UnitTest/TestTypes.h>
@@ -118,5 +119,62 @@ namespace GOAT
 
         EXPECT_TRUE(m_blackboard->Set<AZ::s64>(key, 3, AgentId{}));
         EXPECT_EQ(storage->GetEpoch(), afterChange);
+    }
+
+    //! The stamp is what lets a guard tell which slot changed rather than only that something did.
+    TEST_F(BlackboardSystemFixture, GetStamp_MovesOnlyForTheSlotThatChanged)
+    {
+        const BlackboardKey first = Declare("first", BlackboardScope::Global);
+        const BlackboardKey second = Declare("second", BlackboardScope::Global);
+        const BlackboardStorage* storage = m_blackboard->FindStorage(BlackboardScope::Global, AgentId{});
+        ASSERT_NE(storage, nullptr);
+
+        const AZ::u32 firstBefore = storage->GetStamp(first);
+        EXPECT_TRUE(m_blackboard->Set<AZ::s64>(second, 9, AgentId{}));
+        EXPECT_EQ(storage->GetStamp(first), firstBefore);
+        EXPECT_EQ(storage->GetStamp(second), storage->GetEpoch());
+
+        EXPECT_TRUE(m_blackboard->Set<AZ::s64>(second, 9, AgentId{}));
+        EXPECT_EQ(storage->GetStamp(second), storage->GetEpoch());
+    }
+
+    //! A write to a variable in a watched scope that the program never reads must not wake the agent.
+    TEST_F(BlackboardSystemFixture, GuardWatch_IgnoresAWriteToASlotItDoesNotGuardOn)
+    {
+        const BlackboardKey guarded = Declare("guarded", BlackboardScope::Global);
+        const BlackboardKey unrelated = Declare("unrelated", BlackboardScope::Global);
+
+        AgentProgram program;
+        program.WatchKey(guarded);
+
+        GuardWatch watch;
+        watch.Connect(program, *m_blackboard, AgentId{});
+        watch.Clear();
+        EXPECT_FALSE(watch.IsDirty());
+
+        EXPECT_TRUE(m_blackboard->Set<AZ::s64>(unrelated, 4, AgentId{}));
+        EXPECT_FALSE(watch.IsDirty());
+
+        EXPECT_TRUE(m_blackboard->Set<AZ::s64>(guarded, 4, AgentId{}));
+        EXPECT_TRUE(watch.IsDirty());
+
+        watch.Clear();
+        EXPECT_FALSE(watch.IsDirty());
+    }
+
+    //! A program that never listed its slots keeps the old rule, so anything in the scope wakes it.
+    TEST_F(BlackboardSystemFixture, GuardWatch_WakesOnAnyWriteInAScopeWhoseSlotsWereNotListed)
+    {
+        const BlackboardKey unrelated = Declare("unrelated", BlackboardScope::Global);
+
+        AgentProgram program;
+        program.m_watchedScopes[static_cast<size_t>(BlackboardScope::Global)] = true;
+
+        GuardWatch watch;
+        watch.Connect(program, *m_blackboard, AgentId{});
+        watch.Clear();
+
+        EXPECT_TRUE(m_blackboard->Set<AZ::s64>(unrelated, 4, AgentId{}));
+        EXPECT_TRUE(watch.IsDirty());
     }
 } // namespace GOAT

@@ -154,7 +154,7 @@ decision.
 flowchart LR
     A[Director writes crowd_pace] --> B[Global scope epoch increments]
     B --> C[Agent ticks]
-    C --> D{GuardWatch: has my scope moved?}
+    C --> D{GuardWatch: did a variable I guard on change?}
     D -->|yes| E[Backend re-checks]
     E --> F[Abandon or continue]
     D -->|no| G[Sleep]
@@ -162,6 +162,11 @@ flowchart LR
 
 The write is **one integer increment**, not a walk of the level. Each agent notices on its own
 next tick by comparing a counter. See [[GuardWatch]].
+
+The scope counter is only the first, cheap check. When it has moved, the agent compares the change
+stamp of each variable its program guards on, so a write to some other variable in the same scope
+wakes nobody. A program whose guarded variables were not listed falls back to waking on any write in
+the scope.
 
 A `condition` observes the key it reads by default, so this needs nothing authored — no `abort`,
 no service polling a variable on an interval.

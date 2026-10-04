@@ -378,7 +378,7 @@ namespace GOAT
         // must not wake itself on a scope it merely reasons about.
         for (const HtnCondition& condition : domain.m_conditions)
         {
-            domain.m_watchedScopes[static_cast<size_t>(condition.m_key.GetScope())] = true;
+            domain.WatchKey(condition.m_key);
         }
 
         const AZStd::string named = Text(root, "root");

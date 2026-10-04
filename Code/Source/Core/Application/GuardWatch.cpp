@@ -23,6 +23,7 @@ namespace GOAT
         }
 
         m_blackboard = &blackboard;
+        m_program = &program;
         m_agent = agent;
 
         // A freshly connected agent has never evaluated its guards.
@@ -32,6 +33,7 @@ namespace GOAT
     void GuardWatch::Disconnect()
     {
         m_blackboard = nullptr;
+        m_program = nullptr;
         m_agent = AgentId{};
         m_watched.fill(false);
         m_seen.fill(0);
@@ -59,10 +61,35 @@ namespace GOAT
 
         for (size_t scopeIndex = 0; scopeIndex < ScopeCount; ++scopeIndex)
         {
-            if (m_watched[scopeIndex] && EpochOf(scopeIndex) != m_seen[scopeIndex])
+            if (!m_watched[scopeIndex])
+            {
+                continue;
+            }
+
+            const BlackboardStorage* storage =
+                m_blackboard->FindStorage(static_cast<BlackboardScope>(scopeIndex), m_agent);
+            const AZ::u32 epoch = storage != nullptr ? storage->GetEpoch() : 0;
+            if (epoch == m_seen[scopeIndex])
+            {
+                continue;
+            }
+
+            // Something in the scope changed. It only matters when it was a slot this program reads.
+            if (storage == nullptr || m_program == nullptr || m_program->WatchesWholeScope(scopeIndex))
             {
                 return true;
             }
+
+            for (const BlackboardKey key : m_program->m_watchedKeys[scopeIndex])
+            {
+                if (storage->GetStamp(key) > m_seen[scopeIndex])
+                {
+                    return true;
+                }
+            }
+
+            // Nothing watched moved, so what changed is already dealt with.
+            m_seen[scopeIndex] = epoch;
         }
 
         return false;

@@ -1,11 +1,13 @@
 #pragma once
 
+#include <GOAT/Domain/BlackboardKey.h>
 #include <GOAT/Domain/BlackboardTypes.h>
 #include <GOAT/GOATTypeIds.h>
 
 #include <AzCore/Memory/SystemAllocator.h>
 #include <AzCore/Name/Name.h>
 #include <AzCore/RTTI/RTTI.h>
+#include <AzCore/std/algorithm.h>
 #include <AzCore/std/containers/array.h>
 #include <AzCore/std/containers/vector.h>
 
@@ -39,6 +41,55 @@ namespace GOAT
         IDecisionBackend* m_backend = nullptr;
         //! Blackboard scopes this program guards on, so a write elsewhere never wakes it.
         AZStd::array<bool, static_cast<size_t>(BlackboardScope::Count)> m_watchedScopes{};
+        //! The slots it guards on, per scope. A write to any other slot never wakes it, even in a
+        //! scope it watches.
+        AZStd::array<AZStd::vector<BlackboardKey>, static_cast<size_t>(BlackboardScope::Count)> m_watchedKeys;
+        //! Set for a scope whose individual slots are not known, so any write in it wakes the agent.
+        AZStd::array<bool, static_cast<size_t>(BlackboardScope::Count)> m_watchesAll{};
+
+        //! Guards on one slot: its scope is watched and the slot is listed once.
+        void WatchKey(BlackboardKey key)
+        {
+            const size_t scope = static_cast<size_t>(key.GetScope());
+            m_watchedScopes[scope] = true;
+
+            AZStd::vector<BlackboardKey>& keys = m_watchedKeys[scope];
+            if (AZStd::find(keys.begin(), keys.end(), key) == keys.end())
+            {
+                keys.push_back(key);
+            }
+        }
+
+        //! True when any write in the scope should wake the agent: its slots were not listed, or
+        //! something it hands work to could not list its own.
+        bool WatchesWholeScope(size_t scope) const
+        {
+            return m_watchesAll[scope] || m_watchedKeys[scope].empty();
+        }
+
+        //! Takes on whatever another program watches, as a host must for what it nests.
+        void WatchAsWell(const AgentProgram& other)
+        {
+            for (size_t scope = 0; scope < m_watchedScopes.size(); ++scope)
+            {
+                if (!other.m_watchedScopes[scope])
+                {
+                    continue;
+                }
+
+                m_watchedScopes[scope] = true;
+                if (other.WatchesWholeScope(scope))
+                {
+                    m_watchesAll[scope] = true;
+                    continue;
+                }
+
+                for (const BlackboardKey key : other.m_watchedKeys[scope])
+                {
+                    WatchKey(key);
+                }
+            }
+        }
         //! Subtree slots this was compiled against, deduplicated. Recorded because the compiler
         //! that resolved them is the only thing that knows, and rebinding one has to find
         //! whoever used it again.

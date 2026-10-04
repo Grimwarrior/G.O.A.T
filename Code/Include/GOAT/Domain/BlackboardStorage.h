@@ -5,6 +5,7 @@
 #include <GOAT/Domain/BlackboardKey.h>
 #include <GOAT/Domain/BlackboardTraits.h>
 
+#include <AzCore/std/containers/array.h>
 #include <AzCore/std/containers/vector.h>
 
 namespace GOAT
@@ -18,6 +19,19 @@ namespace GOAT
         //! How many times anything in this storage has actually changed. An agent compares it
         //! against the count it last acted on, which is what replaces subscribing to a change.
         AZ::u32 GetEpoch() const { return m_epoch; }
+
+        //! The epoch this slot last changed at, or zero when it never has or does not exist. A slot
+        //! changed since an epoch that was read earlier is exactly one whose stamp is greater.
+        AZ::u32 GetStamp(BlackboardKey key) const
+        {
+            if (!key.IsValid())
+            {
+                return 0;
+            }
+
+            const AZStd::vector<AZ::u32>& stamps = m_stamps[static_cast<size_t>(key.GetType())];
+            return key.GetIndex() < stamps.size() ? stamps[key.GetIndex()] : 0;
+        }
 
         //! Grows every array to the layout's slot counts, seeding only the newly added slots.
         //! Existing values are kept, so declaring a variable later does not disturb live agents.
@@ -58,6 +72,9 @@ namespace GOAT
         AZStd::vector<EntityIdList> m_entityLists;
 
         //! Starts at one so a watcher's zeroed count never matches an untouched storage.
+        //! When each slot last changed, per type and parallel to the value arrays above.
+        AZStd::array<AZStd::vector<AZ::u32>, static_cast<size_t>(BlackboardType::Count)> m_stamps;
+
         AZ::u32 m_epoch = 1;
     };
 
@@ -123,6 +140,7 @@ namespace GOAT
         // Only a real change counts. A write of the value already there must not wake anybody,
         // which is what keeps a director writing the same order every tick from costing anything.
         ++m_epoch;
+        m_stamps[static_cast<size_t>(key.GetType())][key.GetIndex()] = m_epoch;
         return true;
     }
 } // namespace GOAT

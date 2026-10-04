@@ -558,10 +558,7 @@ namespace GOAT
             // What the nested one watches, the host has to watch too, or the agent sleeps
             // through the very change the nested program is guarding on. What slots it was
             // compiled against the host has to own too, or a rebind cannot find whoever used it.
-            for (size_t scope = 0; scope < inner->second->m_watchedScopes.size(); ++scope)
-            {
-                program.m_watchedScopes[scope] = program.m_watchedScopes[scope] || inner->second->m_watchedScopes[scope];
-            }
+            program.WatchAsWell(*inner->second);
 
             for (const AZ::Name& slot : inner->second->m_boundSlots)
             {

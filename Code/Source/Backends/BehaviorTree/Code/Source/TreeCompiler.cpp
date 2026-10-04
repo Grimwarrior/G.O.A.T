@@ -696,7 +696,7 @@ namespace GOAT
 
         for (const BlackboardKey key : program.m_observedKeys)
         {
-            program.m_watchedScopes[static_cast<size_t>(key.GetScope())] = true;
+            program.WatchKey(key);
         }
 
         AZ_Assert(program.m_nodes[0].m_subtreeEnd == program.m_nodes.size(),

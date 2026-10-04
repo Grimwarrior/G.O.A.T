@@ -445,7 +445,7 @@ namespace GOAT
         // decides on, so a program must not wake itself on its own output.
         for (const UtilityConsideration& considered : program.m_considerations)
         {
-            program.m_watchedScopes[static_cast<size_t>(considered.m_key.GetScope())] = true;
+            program.WatchKey(considered.m_key);
         }
 
         return AZ::Success(AZStd::move(program));

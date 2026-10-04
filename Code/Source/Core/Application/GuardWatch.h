@@ -48,13 +48,17 @@ namespace GOAT
         //! that moves when it grows. The lookup is an array index, and only the scopes this
         //! tree actually guards on are asked about -- usually one.
         IBlackboardSystem* m_blackboard = nullptr;
+        //! Which slots in each watched scope count. Owned by the archetype the agent holds.
+        const AgentProgram* m_program = nullptr;
         AgentId m_agent;
 
         //! Which scopes this tree guards on.
         AZStd::array<bool, ScopeCount> m_watched{};
 
         //! The change count this agent has already accounted for, per watched scope.
-        AZStd::array<AZ::u32, ScopeCount> m_seen{};
+        //! Mutable because a scope that changed in slots nobody here reads is settled by looking,
+        //! and settling it is what stops the next check from looking again.
+        mutable AZStd::array<AZ::u32, ScopeCount> m_seen{};
 
         //! Set when something outside a blackboard write says the guards are stale, and on the
         //! first tick, because a freshly connected agent has never evaluated them.

@@ -33,6 +33,11 @@ namespace GOAT
         m_transforms.resize(count(BlackboardType::Transform), AZ::Transform::CreateIdentity());
         m_entityLists.resize(count(BlackboardType::EntityIdList), EntityIdList{});
 
+        for (size_t type = 0; type < m_stamps.size(); ++type)
+        {
+            m_stamps[type].resize(count(static_cast<BlackboardType>(type)), 0);
+        }
+
         for (const auto& [key, value] : layout.m_defaults)
         {
             AZ_Assert(key.IsValid(), "A declared default must carry a valid key");
@@ -59,6 +64,10 @@ namespace GOAT
         m_quaternions.clear();
         m_transforms.clear();
         m_entityLists.clear();
+        for (AZStd::vector<AZ::u32>& stamps : m_stamps)
+        {
+            stamps.clear();
+        }
 
         EnsureCapacity(layout);
 
