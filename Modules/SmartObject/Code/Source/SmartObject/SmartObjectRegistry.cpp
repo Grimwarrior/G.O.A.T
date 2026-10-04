@@ -27,7 +27,22 @@ namespace GOAT_SmartObject
         Object object;
         object.m_description = AZStd::move(description);
         object.m_users.reserve(object.m_description.m_capacity);
-        m_objects[entity] = AZStd::move(object);
+        Object& stored = m_objects[entity] = AZStd::move(object);
+
+        // Once per distinct use, so an entity that lists a use twice is not offered twice.
+        for (const AZ::Name& use : stored.m_description.m_uses)
+        {
+            AZStd::vector<Offer>& offers = m_byUse[use];
+            const bool listed = AZStd::any_of(offers.begin(), offers.end(),
+                [entity](const Offer& offer)
+                {
+                    return offer.m_entity == entity;
+                });
+            if (!listed)
+            {
+                offers.push_back(Offer{ entity, &stored });
+            }
+        }
 
         AZ_Assert(m_objects.find(entity) != m_objects.end(), "Adding a smart object must leave it findable");
     }
@@ -46,6 +61,27 @@ namespace GOAT_SmartObject
             m_claims.erase(agent);
         }
 
+        for (const AZ::Name& use : found->second.m_description.m_uses)
+        {
+            const auto offers = m_byUse.find(use);
+            if (offers == m_byUse.end())
+            {
+                continue;
+            }
+
+            AZStd::vector<Offer>& list = offers->second;
+            list.erase(AZStd::remove_if(list.begin(), list.end(),
+                           [entity](const Offer& offer)
+                           {
+                               return offer.m_entity == entity;
+                           }),
+                list.end());
+            if (list.empty())
+            {
+                m_byUse.erase(offers);
+            }
+        }
+
         m_objects.erase(found);
     }
 
@@ -53,30 +89,21 @@ namespace GOAT_SmartObject
     {
         AZ_Assert(entity.IsValid(), "An anchor is only read from a valid entity");
 
-        // Checked rather than inferred from the result: an entity with no transform handler
-        // leaves the identity in place, which would silently anchor everything at the origin.
-        if (!AZ::TransformBus::HasHandlers(entity))
+        // One handler lookup, then a direct call, rather than a HasHandlers check and then a second dispatch.
+        AZ::TransformInterface* transform = AZ::TransformBus::FindFirstHandler(entity);
+        if (transform == nullptr)
         {
             AZ_Error("GOAT", false, "Smart object %s has no transform, so it has no anchor",
                 entity.ToString().c_str());
             return false;
         }
 
-        AZ::Transform transform = AZ::Transform::CreateIdentity();
-        AZ::TransformBus::EventResult(transform, entity, &AZ::TransformInterface::GetWorldTM);
-        outAnchor = transform.TransformPoint(offset);
+        outAnchor = transform->GetWorldTM().TransformPoint(offset);
         return true;
     }
 
     bool SmartObjectRegistry::Matches(const SmartObjectDescription& description, const SmartObjectQuery& query)
     {
-        const auto& uses = description.m_uses;
-        if (AZStd::find(uses.begin(), uses.end(), query.m_use) == uses.end())
-        {
-            return false;
-        }
-
-        // An object nobody owns is anyone's; an owned one is only its owner's.
         if (!query.m_owner.IsEmpty() && !description.m_owner.IsEmpty() && description.m_owner != query.m_owner)
         {
             return false;
@@ -110,28 +137,38 @@ namespace GOAT_SmartObject
         AZ::EntityId bestEntity;
         AZ::Vector3 bestAnchor = AZ::Vector3::CreateZero();
 
-        for (auto& [entity, object] : m_objects)
+        Object* bestObject = nullptr;
+
+        // Only objects offering the use are looked at, and capacity, owner and tags are settled before
+        // the transform is read, since that is the expensive part.
+        const auto offers = m_byUse.find(query.m_use);
+        if (offers != m_byUse.end())
         {
-            if (object.m_users.size() >= object.m_description.m_capacity || !Matches(object.m_description, query))
+            for (const Offer& offer : offers->second)
             {
-                continue;
-            }
+                Object& object = *offer.m_object;
+                if (object.m_users.size() >= object.m_description.m_capacity || !Matches(object.m_description, query))
+                {
+                    continue;
+                }
 
-            AZ::Vector3 anchor = AZ::Vector3::CreateZero();
-            if (!FindAnchor(entity, object.m_description.m_anchorOffset, anchor))
-            {
-                continue;
-            }
+                AZ::Vector3 anchor = AZ::Vector3::CreateZero();
+                if (!FindAnchor(offer.m_entity, object.m_description.m_anchorOffset, anchor))
+                {
+                    continue;
+                }
 
-            const float distanceSq = query.m_from.GetDistanceSq(anchor);
-            if (distanceSq >= bestDistanceSq)
-            {
-                continue;
-            }
+                const float distanceSq = query.m_from.GetDistanceSq(anchor);
+                if (distanceSq >= bestDistanceSq)
+                {
+                    continue;
+                }
 
-            bestDistanceSq = distanceSq;
-            bestEntity = entity;
-            bestAnchor = anchor;
+                bestDistanceSq = distanceSq;
+                bestEntity = offer.m_entity;
+                bestObject = &object;
+                bestAnchor = anchor;
+            }
         }
 
         if (!bestEntity.IsValid())
@@ -141,14 +178,14 @@ namespace GOAT_SmartObject
             return claim;
         }
 
-        m_objects[bestEntity].m_users.push_back(agent);
+        bestObject->m_users.push_back(agent);
         m_claims[agent] = bestEntity;
 
         claim.m_entity = bestEntity;
         claim.m_anchor = bestAnchor;
 
         AZ_Assert(m_claims.find(agent) != m_claims.end(), "A successful claim must be recorded against the agent");
-        AZ_Assert(m_objects[bestEntity].m_users.size() <= m_objects[bestEntity].m_description.m_capacity,
+        AZ_Assert(bestObject->m_users.size() <= bestObject->m_description.m_capacity,
             "A smart object must never hold more users than its capacity");
 
         AZLOG(GoatSmartObject, "GOAT: agent %u claimed '%s' on entity %s",
