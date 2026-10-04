@@ -24,17 +24,30 @@ namespace GOAT_Perception
         return true;
     }
 
+    void PhysicsPerceptionWorld::ResolveScene() const
+    {
+        m_scenes = AZ::Interface<AzPhysics::SceneInterface>::Get();
+        m_scene = m_scenes != nullptr ? m_scenes->GetSceneHandle(AzPhysics::DefaultPhysicsSceneName) : AzPhysics::InvalidSceneHandle;
+    }
+
+    void PhysicsPerceptionWorld::BeginFrame()
+    {
+        m_rays = 0;
+        ResolveScene();
+    }
+
     bool PhysicsPerceptionWorld::HasLineOfSight(const AZ::Vector3& from, const AZ::Vector3& to, AZ::u32 blockerMask,
         AZ::EntityId ignoreA, AZ::EntityId ignoreB, AZ::EntityId* outBlocker) const
     {
-        auto* scenes = AZ::Interface<AzPhysics::SceneInterface>::Get();
-        if (scenes == nullptr)
+        // Resolved once per frame in BeginFrame; this only repeats the lookup when there was no scene then.
+        if (m_scenes == nullptr || m_scene == AzPhysics::InvalidSceneHandle)
         {
-            return true;
+            ResolveScene();
         }
 
-        const AzPhysics::SceneHandle scene = scenes->GetSceneHandle(AzPhysics::DefaultPhysicsSceneName);
-        if (scene == AzPhysics::InvalidSceneHandle)
+        AzPhysics::SceneInterface* scenes = m_scenes;
+        const AzPhysics::SceneHandle scene = m_scene;
+        if (scenes == nullptr || scene == AzPhysics::InvalidSceneHandle)
         {
             return true;
         }
@@ -45,6 +58,8 @@ namespace GOAT_Perception
         {
             return true;
         }
+
+        ++m_rays;
 
         AzPhysics::RayCastRequest request;
         request.m_start = from;

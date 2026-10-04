@@ -4,13 +4,18 @@
 #include <GOAT/Interfaces/IBlackboardSystem.h>
 
 #include <AzCore/Component/ComponentApplicationBus.h>
+#include <AzCore/Console/IConsole.h>
 #include <AzCore/std/algorithm.h>
+#include <AzCore/std/sort.h>
 
 namespace GOAT_Perception
 {
     namespace
     {
         constexpr AZ::u64 RandomSeed = 0x600A7;
+
+        AZ_CVAR(AZ::u32, goat_perceptionRayBudget, 64, nullptr, AZ::ConsoleFunctorFlags::Null,
+            "Line of sight rays GOAT perception casts in one frame before the remaining sensors wait for the next. 0 is unlimited");
 
         //! An entity as a person would look for it, by name and id.
         AZStd::string Describe(AZ::EntityId entity)
@@ -49,6 +54,9 @@ namespace GOAT_Perception
         fresh.m_asset = profile;
         fresh.m_eyeHeight = eyeHeight;
         fresh.m_senses.SetOwner(entity);
+
+        // Spread the first look across one interval, so sensors registered together do not all fire on the same frame.
+        fresh.m_sinceSense = m_random.GetRandomFloat() * ProfileOf(fresh).m_senseInterval;
         m_sensors[entity] = AZStd::move(fresh);
 
         AZ_TracePrintf("GOAT_Perception", "Sensor registered on %s (%s); %zu sensor(s), %zu perceivable(s)\n", entity.ToString().c_str(),
@@ -320,7 +328,10 @@ namespace GOAT_Perception
 
         DeliverAlerts();
 
-        bool candidatesPlaced = false;
+        m_world.BeginFrame();
+
+        // Gather who is due, then serve the most overdue first, so a budget that runs out starves nobody for good.
+        m_due.clear();
         for (auto& entry : m_sensors)
         {
             Sensor& sensor = entry.second;
@@ -335,10 +346,30 @@ namespace GOAT_Perception
             // Agents in a slower pacing band are sensed less often, which is the level of detail lever.
             const PerceptionProfileAsset& profile = ProfileOf(sensor);
             const float interval = profile.m_senseInterval * static_cast<float>(1 + agents->GetAgentBand(sensor.m_agent));
-            if (sensor.m_sinceSense < interval)
+            if (sensor.m_sinceSense >= interval)
             {
-                continue;
+                m_due.push_back(DueSensor{ &sensor, sensor.m_sinceSense / interval });
             }
+        }
+
+        AZStd::sort(m_due.begin(), m_due.end(),
+            [](const DueSensor& left, const DueSensor& right)
+            {
+                return left.m_overdue > right.m_overdue;
+            });
+
+        const AZ::u32 rayBudget = goat_perceptionRayBudget;
+        bool candidatesPlaced = false;
+        for (const DueSensor& due : m_due)
+        {
+            // Left as it is, still due, and first in line next frame.
+            if (rayBudget > 0 && m_world.GetRayCount() >= rayBudget)
+            {
+                break;
+            }
+
+            Sensor& sensor = *due.m_sensor;
+            const PerceptionProfileAsset& profile = ProfileOf(sensor);
 
             const float elapsed = sensor.m_sinceSense;
             sensor.m_sinceSense = 0.0f;

@@ -80,6 +80,10 @@ graph TD
 - Sensors are checked every **Sense Interval** seconds, multiplied by one plus the agent's pacing
   band, so far agents cost less ([[AgentRegistry]]).
 - A target is only raycast when the cheap cone test passes, and nearest first.
+- A sensor stops at the first target with a clear line, so a crowd in the cone costs one ray, not one each.
+- Rays are capped per frame by the `goat_perceptionRayBudget` cvar (default 64, 0 is unlimited). Sensors over
+  the cap wait for the next frame, most overdue first. A sensor can overshoot by the rays of its own pass.
+- A new sensor's first look is spread randomly across one interval, so sensors made together do not all fire at once.
 - Hearing is evaluated when the sound is made, not on a pass.
 - Allies told to engage do not call for help in turn.
 

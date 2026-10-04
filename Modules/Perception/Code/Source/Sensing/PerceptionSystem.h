@@ -49,6 +49,13 @@ namespace GOAT_Perception
             PublishedState m_published;
         };
 
+        //! A sensor whose turn has come, and how many of its intervals it has waited.
+        struct DueSensor final
+        {
+            Sensor* m_sensor = nullptr;
+            float m_overdue = 0.0f;
+        };
+
         struct Perceivable final
         {
             PerceivableDescription m_description;
@@ -88,6 +95,7 @@ namespace GOAT_Perception
         AZStd::unordered_map<AZ::EntityId, Perceivable> m_perceivables;
         AZStd::vector<PendingAlert> m_alerts;
         //! Scratch for one tick: every perceivable placed in the world, and the tags each carries.
+        AZStd::vector<DueSensor> m_due;
         AZStd::vector<SenseCandidate> m_candidates;
         AZStd::vector<const AZStd::vector<AZStd::string>*> m_candidateTags;
         //! Scratch for one sensor: the candidates its profile accepts.

@@ -39,47 +39,79 @@ namespace GOAT_Perception
         const SightCone& cone = ConeFor(profile, before);
         m_debug = SenseDebug();
 
-        // Nearest first, so the raycast is only paid for a candidate that could beat the best seen so far.
+        // Nearest first: each round picks the nearest candidate not yet tried that could be seen, and the
+        // first one with a clear line wins, so a crowd in the cone costs one ray rather than one each.
         const SenseCandidate* best = nullptr;
         float bestDistance = AZStd::numeric_limits<float>::max();
         bool bestByProximity = false;
 
-        for (const SenseCandidate& candidate : candidates)
+        bool tried = false;
+        float triedDistance = 0.0f;
+        size_t triedIndex = 0;
+
+        while (best == nullptr)
         {
-            if (candidate.m_entity == m_owner)
+            const SenseCandidate* next = nullptr;
+            float nextDistance = AZStd::numeric_limits<float>::max();
+            size_t nextIndex = 0;
+            bool nextByProximity = false;
+
+            for (size_t i = 0; i < candidates.size(); ++i)
             {
-                continue;
+                const SenseCandidate& candidate = candidates[i];
+                if (candidate.m_entity == m_owner)
+                {
+                    continue;
+                }
+
+                const float distance = candidate.m_position.GetDistance(eye.m_position);
+                if (tried && (distance < triedDistance || (distance == triedDistance && i <= triedIndex)))
+                {
+                    continue;
+                }
+                if (next != nullptr && distance >= nextDistance)
+                {
+                    continue;
+                }
+
+                const bool byProximity = profile.m_proximityRange > 0.0f && distance <= profile.m_proximityRange;
+                if (!byProximity && !InsideSightCone(eye, cone, candidate.m_position))
+                {
+                    continue;
+                }
+
+                next = &candidate;
+                nextDistance = distance;
+                nextIndex = i;
+                nextByProximity = byProximity;
             }
 
-            const float distance = candidate.m_position.GetDistance(eye.m_position);
-            if (distance >= bestDistance)
+            if (next == nullptr)
             {
-                continue;
-            }
-
-            const bool byProximity = profile.m_proximityRange > 0.0f && distance <= profile.m_proximityRange;
-            if (!byProximity && !InsideSightCone(eye, cone, candidate.m_position))
-            {
-                continue;
+                break;
             }
 
             AZ::EntityId blocker;
-            if (!byProximity &&
-                !world.HasLineOfSight(eye.m_position, candidate.m_position, profile.m_sightBlockerMask, m_owner, candidate.m_entity, &blocker))
+            if (nextByProximity ||
+                world.HasLineOfSight(eye.m_position, next->m_position, profile.m_sightBlockerMask, m_owner, next->m_entity, &blocker))
             {
-                // Remembered so a sensor that sees nothing can say what it was looking at and what was in the way.
-                if (distance < m_debug.m_blockedDistance)
-                {
-                    m_debug.m_blockedTarget = candidate.m_entity;
-                    m_debug.m_blocker = blocker;
-                    m_debug.m_blockedDistance = distance;
-                }
-                continue;
+                best = next;
+                bestDistance = nextDistance;
+                bestByProximity = nextByProximity;
+                break;
             }
 
-            best = &candidate;
-            bestDistance = distance;
-            bestByProximity = byProximity;
+            // Remembered so a sensor that sees nothing can say what it was looking at and what was in the way.
+            if (nextDistance < m_debug.m_blockedDistance)
+            {
+                m_debug.m_blockedTarget = next->m_entity;
+                m_debug.m_blocker = blocker;
+                m_debug.m_blockedDistance = nextDistance;
+            }
+
+            tried = true;
+            triedDistance = nextDistance;
+            triedIndex = nextIndex;
         }
 
         float fillPerSecond = 0.0f;
