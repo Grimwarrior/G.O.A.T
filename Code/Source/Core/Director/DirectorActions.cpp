@@ -5,6 +5,7 @@
 
 #include <AzCore/Console/ILogger.h>
 #include <AzCore/Name/NameDictionary.h>
+#include <AzCore/std/containers/span.h>
 
 namespace GOAT
 {
@@ -15,18 +16,18 @@ namespace GOAT
         //! `key` names an EntityId variable. Set and holding an agent in reach, the verb commands
         //! that one; unset, it commands them all. That is per agent and per group granularity
         //! with no extra vocabulary, using the blackboard as the channel it already is.
-        void SelectTargets(
+        //!
+        //! Looks at the reach in place when it is all of it, rather than copying it, and points at
+        //! @p single when it is one agent, so choosing targets allocates nothing.
+        AZStd::span<const AgentId> SelectTargets(
             const ActionContext& context,
             const AZStd::vector<AgentId>& reach,
-            AZStd::vector<AgentId>& out)
+            AgentId& single)
         {
-            out.clear();
-
             const BlackboardKey key = context.m_request->m_targetKey;
             if (!key.IsValid())
             {
-                out = reach;
-                return;
+                return AZStd::span<const AgentId>(reach.data(), reach.size());
             }
 
             const AZ::EntityId* named = context.m_blackboard->Find<AZ::EntityId>(key, context.m_agent);
@@ -34,7 +35,7 @@ namespace GOAT
             {
                 // The variable names nobody yet, which is a normal state for a director that has
                 // not chosen a target this tick, not a mistake worth warning about.
-                return;
+                return {};
             }
 
             IAgentSystem* agents = AgentSystemInterface::Get();
@@ -44,10 +45,12 @@ namespace GOAT
             {
                 if (candidate == wanted)
                 {
-                    out.push_back(candidate);
-                    return;
+                    single = candidate;
+                    return AZStd::span<const AgentId>(&single, 1);
                 }
             }
+
+            return {};
         }
 
         //! How many agents a verb may act on, from its `limit` property. Zero means all of them.
@@ -104,8 +107,8 @@ namespace GOAT
 
         const AZStd::vector<AgentId>& reach = m_directors.Resolve(director);
 
-        AZStd::vector<AgentId> targets;
-        SelectTargets(context, reach, targets);
+        AgentId single;
+        const AZStd::span<const AgentId> targets = SelectTargets(context, reach, single);
 
         const size_t limit = ReadLimit(context, targets.size());
         const ActionStateId verb = GetVerbId(context);
