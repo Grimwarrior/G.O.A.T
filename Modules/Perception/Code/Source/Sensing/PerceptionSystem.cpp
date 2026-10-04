@@ -55,6 +55,10 @@ namespace GOAT_Perception
         fresh.m_eyeHeight = eyeHeight;
         fresh.m_senses.SetOwner(entity);
 
+        const PerceptionProfileAsset& targets = ProfileOf(fresh);
+        fresh.m_acceptsAll = targets.m_targetTags.empty();
+        fresh.m_targetMask = TagMask(targets.m_targetTags);
+
         // Spread the first look across one interval, so sensors registered together do not all fire on the same frame.
         fresh.m_sinceSense = m_random.GetRandomFloat() * ProfileOf(fresh).m_senseInterval;
         m_sensors[entity] = AZStd::move(fresh);
@@ -71,7 +75,9 @@ namespace GOAT_Perception
 
     void PerceptionSystem::RegisterPerceivable(AZ::EntityId entity, const PerceivableDescription& description)
     {
-        m_perceivables[entity].m_description = description;
+        Perceivable& perceivable = m_perceivables[entity];
+        perceivable.m_description = description;
+        perceivable.m_tagMask = TagMask(description.m_tags);
 
         AZ_TracePrintf("GOAT_Perception", "Perceivable registered on %s; %zu sensor(s), %zu perceivable(s)\n", entity.ToString().c_str(),
             m_sensors.size(), m_perceivables.size());
@@ -106,31 +112,43 @@ namespace GOAT_Perception
         return !sensor.m_agent.IsNull();
     }
 
-    bool PerceptionSystem::AcceptsTags(const PerceptionProfileAsset& profile, const AZStd::vector<AZStd::string>& tags)
+    AZ::u64 PerceptionSystem::TagBit(const AZStd::string& tag, bool create)
     {
-        if (profile.m_targetTags.empty())
+        constexpr size_t MaxTags = 64;
+
+        const auto known = m_tagBits.find(tag);
+        if (known != m_tagBits.end())
         {
-            return true;
+            return AZ::u64{ 1 } << known->second;
+        }
+        if (!create)
+        {
+            return 0;
+        }
+        if (m_tagBits.size() >= MaxTags)
+        {
+            AZ_Error("GOAT", false, "Perception knows %zu distinct tags already, so '%s' is ignored and matches nothing", MaxTags, tag.c_str());
+            return 0;
         }
 
-        for (const AZStd::string& tag : tags)
-        {
-            if (AZStd::find(profile.m_targetTags.begin(), profile.m_targetTags.end(), tag) != profile.m_targetTags.end())
-            {
-                return true;
-            }
-        }
-        return false;
+        const AZ::u32 bit = static_cast<AZ::u32>(m_tagBits.size());
+        m_tagBits.emplace(tag, bit);
+        return AZ::u64{ 1 } << bit;
     }
 
-    bool PerceptionSystem::AcceptsTag(const PerceptionProfileAsset& profile, const AZ::Name& tag)
+    AZ::u64 PerceptionSystem::TagMask(const AZStd::vector<AZStd::string>& tags)
     {
-        if (tag.IsEmpty() || profile.m_targetTags.empty())
+        AZ::u64 mask = 0;
+        for (const AZStd::string& tag : tags)
         {
-            return true;
+            mask |= TagBit(tag, true);
         }
+        return mask;
+    }
 
-        return AZStd::find(profile.m_targetTags.begin(), profile.m_targetTags.end(), tag.GetStringView()) != profile.m_targetTags.end();
+    bool PerceptionSystem::Accepts(const Sensor& sensor, AZ::u64 tagMask)
+    {
+        return sensor.m_acceptsAll || (sensor.m_targetMask & tagMask) != 0;
     }
 
     EyePose PerceptionSystem::EyeOf(const Sensor& sensor, const EntityPose& pose) const
@@ -250,6 +268,10 @@ namespace GOAT_Perception
 
     void PerceptionSystem::EmitNoise(const AZ::Vector3& position, float loudness, AZ::EntityId source, const AZ::Name& tag)
     {
+        // An untagged sound is heard by everyone, so it is the one case that skips the mask.
+        const bool tagged = !tag.IsEmpty();
+        const AZ::u64 tagMask = tagged ? TagBit(AZStd::string(tag.GetStringView()), false) : 0;
+
         for (auto& entry : m_sensors)
         {
             Sensor& sensor = entry.second;
@@ -260,7 +282,7 @@ namespace GOAT_Perception
 
             const PerceptionProfileAsset& profile = ProfileOf(sensor);
             EntityPose pose;
-            if (!AcceptsTag(profile, tag) || !m_world.GetPose(sensor.m_entity, pose))
+            if ((tagged && !Accepts(sensor, tagMask)) || !m_world.GetPose(sensor.m_entity, pose))
             {
                 continue;
             }
@@ -383,7 +405,7 @@ namespace GOAT_Perception
             if (!candidatesPlaced)
             {
                 m_candidates.clear();
-                m_candidateTags.clear();
+                m_candidateMasks.clear();
                 for (const auto& perceivable : m_perceivables)
                 {
                     EntityPose placed;
@@ -393,7 +415,7 @@ namespace GOAT_Perception
                         candidate.m_entity = perceivable.first;
                         candidate.m_position = placed.m_position + perceivable.second.m_description.m_aimOffset;
                         m_candidates.push_back(candidate);
-                        m_candidateTags.push_back(&perceivable.second.m_description.m_tags);
+                        m_candidateMasks.push_back(perceivable.second.m_tagMask);
                     }
                 }
                 candidatesPlaced = true;
@@ -409,7 +431,7 @@ namespace GOAT_Perception
             m_matched.clear();
             for (size_t i = 0; i < m_candidates.size(); ++i)
             {
-                if (AcceptsTags(profile, *m_candidateTags[i]))
+                if (Accepts(sensor, m_candidateMasks[i]))
                 {
                     m_matched.push_back(m_candidates[i]);
                 }
