@@ -16,10 +16,6 @@ namespace GOAT_Navigation
         AZ_CVAR(AZ::u32, goat_pathQueryThreads, 2, nullptr, AZ::ConsoleFunctorFlags::Null,
             "Number of threads GOAT uses to answer navigation path queries");
 
-        //! Requests started per frame, so a burst of agents cannot flood the task graph.
-        AZ_CVAR(AZ::u32, goat_pathQueryBudget, 16, nullptr, AZ::ConsoleFunctorFlags::Null,
-            "Maximum navigation path queries GOAT submits in one frame");
-
         //! Search nodes each worker query may use. Recast's own mesh controller uses the same value.
         constexpr int MaxSearchNodes = 2048;
         //! Longest polygon path a single query may return.
@@ -37,14 +33,31 @@ namespace GOAT_Navigation
     {
         const AZ::u32 workerCount = AZStd::max<AZ::u32>(goat_pathQueryThreads, 1);
         m_workers.resize(workerCount);
-        m_executor = AZStd::make_unique<AZ::TaskExecutor>(workerCount);
 
         AZ_Assert(!m_workers.empty(), "A navigation service must have at least one worker");
+
+        m_threads.reserve(workerCount);
+        for (size_t worker = 0; worker < workerCount; ++worker)
+        {
+            AZStd::thread_desc desc;
+            desc.m_name = "GOAT Navigation";
+            m_threads.emplace_back(desc, [this, worker]() { WorkerLoop(worker); });
+        }
     }
 
     NavigationService::~NavigationService()
     {
         ClearNavigationMesh();
+
+        {
+            AZStd::lock_guard<AZStd::mutex> lock(m_requestLock);
+            m_stopping = true;
+        }
+        m_workAvailable.notify_all();
+        for (AZStd::thread& thread : m_threads)
+        {
+            thread.join();
+        }
     }
 
     void NavigationService::SetNavigationMesh(AZ::EntityId navMeshEntity)
@@ -66,58 +79,28 @@ namespace GOAT_Navigation
             navMeshEntity.ToString().c_str());
     }
 
-    void NavigationService::WaitForInFlight()
+    void NavigationService::WaitForIdle()
     {
-        {
-            AZStd::unique_lock<AZStd::mutex> lock(m_flightLock);
-            m_flightIdle.wait(lock, [this] { return m_tasksInFlight == 0; });
-            AZ_Assert(m_tasksInFlight == 0, "Waiting must leave no worker running");
-        }
-
-        RetireBatch();
-    }
-
-    void NavigationService::RetireBatch()
-    {
-        // The wait event signals only once the executor has released every task, which is
-        // strictly later than the last task body running, so this is what makes destroying
-        // the graph safe. It returns at once when the batch has already finished.
-        if (m_taskGraphEvent != nullptr)
-        {
-            m_taskGraphEvent->Wait();
-        }
-
-        m_taskGraphEvent.reset();
-        m_taskGraph.reset();
-
-        AZ_Assert(m_taskGraph == nullptr, "Retiring a batch must leave no graph behind");
-    }
-
-    void NavigationService::FinishTask()
-    {
-        AZStd::lock_guard<AZStd::mutex> lock(m_flightLock);
-
-        AZ_Assert(m_tasksInFlight > 0, "A worker finished a batch that was not counted as running");
-        if (m_tasksInFlight > 0 && --m_tasksInFlight == 0)
-        {
-            m_flightIdle.notify_all();
-        }
+        AZStd::unique_lock<AZStd::mutex> lock(m_requestLock);
+        m_idle.wait(lock, [this] { return m_running == 0; });
+        AZ_Assert(m_running == 0, "Waiting must leave no worker running");
     }
 
     void NavigationService::ClearNavigationMesh()
     {
         RecastNavigation::RecastNavigationMeshNotificationBus::Handler::BusDisconnect();
 
-        // No lock is held here on purpose: a worker still writing its result needs m_requestLock.
-        WaitForInFlight();
-
+        // Cancelled first, so nothing still queued can start; then the queries already running finish.
         {
             AZStd::lock_guard<AZStd::mutex> lock(m_requestLock);
-            for (Request& request : m_requests)
+            m_pendingOrder.clear();
+            for (auto& [id, request] : m_requests)
             {
                 request.m_status = PathStatus::Cancelled;
+                m_cancelledIds.push_back(id);
             }
         }
+        WaitForIdle();
 
         // Nothing may read the mesh pointer past this point.
         AZStd::unique_lock<AZStd::shared_mutex> writeLock(m_meshLock);
@@ -238,67 +221,58 @@ namespace GOAT_Navigation
 
         AZ_Assert(request.m_id != InvalidPathRequestId, "A path request id must never collide with the null id");
 
-        m_requests.push_back(AZStd::move(request));
-        return m_requests.back().m_id;
+        const PathRequestId id = request.m_id;
+        m_requests.emplace(id, AZStd::move(request));
+        m_pendingOrder.push_back(id);
+        m_workAvailable.notify_one();
+        return id;
     }
 
     PathStatus NavigationService::GetStatus(PathRequestId request) const
     {
         AZStd::lock_guard<AZStd::mutex> lock(m_requestLock);
-        for (const Request& entry : m_requests)
-        {
-            if (entry.m_id == request)
-            {
-                return entry.m_status;
-            }
-        }
-        return PathStatus::Cancelled;
+        const auto found = m_requests.find(request);
+        return found != m_requests.end() ? found->second.m_status : PathStatus::Cancelled;
     }
 
     bool NavigationService::TakePath(PathRequestId request, AZStd::vector<AZ::Vector3>& outPath)
     {
         AZStd::lock_guard<AZStd::mutex> lock(m_requestLock);
 
-        for (size_t i = 0; i < m_requests.size(); ++i)
+        const auto found = m_requests.find(request);
+        if (found == m_requests.end())
         {
-            if (m_requests[i].m_id != request)
-            {
-                continue;
-            }
-
-            if (m_requests[i].m_status == PathStatus::Pending || m_requests[i].m_status == PathStatus::Running)
-            {
-                return false;
-            }
-
-            outPath = AZStd::move(m_requests[i].m_path);
-            m_requests.erase(m_requests.begin() + i);
-            return true;
+            return false;
         }
 
-        return false;
+        if (found->second.m_status == PathStatus::Pending || found->second.m_status == PathStatus::Running)
+        {
+            return false;
+        }
+
+        outPath = AZStd::move(found->second.m_path);
+        m_requests.erase(found);
+        return true;
     }
 
     void NavigationService::CancelRequest(PathRequestId request)
     {
         AZStd::lock_guard<AZStd::mutex> lock(m_requestLock);
-        for (size_t i = 0; i < m_requests.size(); ++i)
+        const auto found = m_requests.find(request);
+        if (found == m_requests.end())
         {
-            if (m_requests[i].m_id != request)
-            {
-                continue;
-            }
-
-            // A worker may be writing to this entry, so mark it and let Update reap it instead.
-            if (m_requests[i].m_status == PathStatus::Running)
-            {
-                m_requests[i].m_status = PathStatus::Cancelled;
-                return;
-            }
-
-            m_requests.erase(m_requests.begin() + i);
             return;
         }
+
+        // A worker may be writing to this entry, so mark it and let Update reap it instead.
+        if (found->second.m_status == PathStatus::Running)
+        {
+            found->second.m_status = PathStatus::Cancelled;
+            m_cancelledIds.push_back(request);
+            return;
+        }
+
+        m_requests.erase(found);
     }
 
     size_t NavigationService::GetPendingCount() const
@@ -307,40 +281,49 @@ namespace GOAT_Navigation
         return m_requests.size();
     }
 
-    void NavigationService::RunQuery(PathRequestId id, Worker& worker)
+    void NavigationService::WorkerLoop(size_t workerIndex)
     {
-        // The count must fall on every path out of the work below, so the work is nested.
-        RunQueryAndStore(id, worker);
-        FinishTask();
-    }
-
-    void NavigationService::RunQueryAndStore(PathRequestId id, Worker& worker)
-    {
-        // Read the endpoints back out by id: a Running request is never erased, so it is still here.
-        AZ::Vector3 from = AZ::Vector3::CreateZero();
-        AZ::Vector3 to = AZ::Vector3::CreateZero();
+        Worker& worker = m_workers[workerIndex];
+        AZStd::unique_lock<AZStd::mutex> lock(m_requestLock);
+        while (true)
         {
-            AZStd::lock_guard<AZStd::mutex> lock(m_requestLock);
-            const Request* found = nullptr;
-            for (const Request& request : m_requests)
-            {
-                if (request.m_id == id)
-                {
-                    found = &request;
-                    break;
-                }
-            }
-
-            AZ_Assert(found != nullptr, "A running path request must still be in the request table");
-            if (found == nullptr)
+            m_workAvailable.wait(lock, [this] { return m_stopping || !m_pendingOrder.empty(); });
+            if (m_stopping)
             {
                 return;
             }
 
-            from = found->m_from;
-            to = found->m_to;
-        }
+            const PathRequestId id = m_pendingOrder.front();
+            m_pendingOrder.pop_front();
 
+            // Cancelled or taken since it was queued: nothing to run.
+            const auto found = m_requests.find(id);
+            if (found == m_requests.end() || found->second.m_status != PathStatus::Pending)
+            {
+                continue;
+            }
+
+            // Endpoints are read in the same locked section that marks it running, so the entry
+            // cannot be reaped between being picked and being read.
+            found->second.m_status = PathStatus::Running;
+            const AZ::Vector3 from = found->second.m_from;
+            const AZ::Vector3 to = found->second.m_to;
+            ++m_running;
+
+            lock.unlock();
+            RunQueryAndStore(id, from, to, worker);
+            lock.lock();
+
+            if (--m_running == 0)
+            {
+                m_idle.notify_all();
+            }
+        }
+    }
+
+    void NavigationService::RunQueryAndStore(
+        PathRequestId id, const AZ::Vector3& from, const AZ::Vector3& to, Worker& worker)
+    {
         AZStd::vector<AZ::Vector3> path;
         PathStatus status = PathStatus::NotFound;
         RunQueryImpl(from, to, worker, path, status);
@@ -348,26 +331,24 @@ namespace GOAT_Navigation
         // Store by id under the lock. If the request was cancelled meanwhile the lookup fails and
         // the result is simply dropped, which is why the task never holds a pointer to it.
         AZStd::lock_guard<AZStd::mutex> lock(m_requestLock);
-        for (Request& request : m_requests)
+        const auto found = m_requests.find(id);
+        if (found == m_requests.end())
         {
-            if (request.m_id != id)
-            {
-                continue;
-            }
-
-            AZ_Assert(request.m_status == PathStatus::Running || request.m_status == PathStatus::Cancelled,
-                "A worker finished a request that was not handed to it");
-
-            // Cancelled while this ran: keep it cancelled and let Update reap it.
-            if (request.m_status == PathStatus::Cancelled)
-            {
-                return;
-            }
-
-            request.m_path = AZStd::move(path);
-            request.m_status = status;
             return;
         }
+
+        Request& request = found->second;
+        AZ_Assert(request.m_status == PathStatus::Running || request.m_status == PathStatus::Cancelled,
+            "A worker finished a request that was not handed to it");
+
+        // Cancelled while this ran: keep it cancelled and let Update reap it.
+        if (request.m_status == PathStatus::Cancelled)
+        {
+            return;
+        }
+
+        request.m_path = AZStd::move(path);
+        request.m_status = status;
     }
 
     void NavigationService::RunQueryImpl(
@@ -437,77 +418,26 @@ namespace GOAT_Navigation
         outStatus = PathStatus::Ready;
     }
 
-    void NavigationService::SubmitPending()
-    {
-        AZStd::vector<PathRequestId> toRun;
-        {
-            AZStd::lock_guard<AZStd::mutex> lock(m_requestLock);
-            for (Request& request : m_requests)
-            {
-                if (request.m_status != PathStatus::Pending)
-                {
-                    continue;
-                }
-                request.m_status = PathStatus::Running;
-                toRun.push_back(request.m_id);
-                if (toRun.size() >= goat_pathQueryBudget)
-                {
-                    break;
-                }
-            }
-        }
-
-        if (toRun.empty())
-        {
-            return;
-        }
-
-        AZ_Assert(!m_workers.empty(), "Submitting a query with no workers configured");
-
-        // A brand new graph every batch. See the member's comment: a reused one latches its
-        // submitted flag when a batch completes during SubmitOnExecutor.
-        RetireBatch();
-        m_taskGraph = AZStd::make_unique<AZ::TaskGraph>("GOAT navigation queries");
-        m_taskGraphEvent = AZStd::make_unique<AZ::TaskGraphEvent>("GOAT navigation queries");
-
-        {
-            AZStd::lock_guard<AZStd::mutex> lock(m_flightLock);
-            AZ_Assert(m_tasksInFlight == 0, "A batch was submitted while another was still running");
-            m_tasksInFlight = toRun.size();
-        }
-
-        for (size_t i = 0; i < toRun.size(); ++i)
-        {
-            // m_workers is sized once at construction, so this pointer stays valid. Only the id
-            // is captured because a task lambda may hold at most 56 bytes.
-            const PathRequestId id = toRun[i];
-            Worker* worker = &m_workers[i % m_workers.size()];
-            m_taskGraph->AddTask(m_taskDescriptor,
-                [this, id, worker]()
-                {
-                    RunQuery(id, *worker);
-                });
-        }
-
-        m_taskGraph->SubmitOnExecutor(*m_executor, m_taskGraphEvent.get());
-    }
-
     void NavigationService::ReapCancelled()
     {
-        // Only ever called with no tasks in flight, so no worker can be holding one of these.
         AZStd::lock_guard<AZStd::mutex> lock(m_requestLock);
 
-        for (size_t i = m_requests.size(); i > 0; --i)
+        for (const PathRequestId id : m_cancelledIds)
         {
-            const Request& request = m_requests[i - 1];
-            AZ_Assert(request.m_status != PathStatus::Running,
-                "A request is still marked running after its task graph completed");
-
-            if (request.m_status == PathStatus::Cancelled)
+            const auto found = m_requests.find(id);
+            if (found == m_requests.end())
             {
-                m_requests.erase(m_requests.begin() + (i - 1));
+                continue;
+            }
+
+            AZ_Assert(found->second.m_status != PathStatus::Running,
+                "A request is still marked running after its task graph completed");
+            if (found->second.m_status == PathStatus::Cancelled)
+            {
+                m_requests.erase(found);
             }
         }
+        m_cancelledIds.clear();
     }
 
     void NavigationService::RecoverBinding()
@@ -544,16 +474,7 @@ namespace GOAT_Navigation
 
     void NavigationService::Update()
     {
-        {
-            AZStd::lock_guard<AZStd::mutex> lock(m_flightLock);
-            if (m_tasksInFlight != 0)
-            {
-                return;
-            }
-        }
-
         RecoverBinding();
         ReapCancelled();
-        SubmitPending();
     }
 } // namespace GOAT_Navigation

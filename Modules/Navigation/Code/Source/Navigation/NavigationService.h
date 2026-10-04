@@ -2,18 +2,20 @@
 
 #include <AzCore/Component/EntityId.h>
 #include <AzCore/Math/Vector3.h>
-#include <AzCore/Task/TaskExecutor.h>
-#include <AzCore/Task/TaskGraph.h>
+#include <AzCore/std/containers/deque.h>
+#include <AzCore/std/containers/unordered_map.h>
 #include <AzCore/std/containers/vector.h>
 #include <AzCore/Time/ITime.h>
 #include <AzCore/std/parallel/atomic.h>
 #include <AzCore/std/parallel/condition_variable.h>
 #include <AzCore/std/parallel/mutex.h>
 #include <AzCore/std/parallel/shared_mutex.h>
+#include <AzCore/std/parallel/thread.h>
 #include <AzCore/std/smart_ptr/unique_ptr.h>
 
 #include <RecastNavigation/RecastNavigationMeshBus.h>
 #include <RecastNavigation/RecastSmartPointer.h>
+
 
 namespace GOAT_Navigation
 {
@@ -74,7 +76,7 @@ namespace GOAT_Navigation
         //! Abandons a request. Safe for an id that already completed.
         void CancelRequest(PathRequestId request);
 
-        //! Retires finished tasks and recycles their storage. Call once per frame.
+        //! Recycles requests cancelled while a worker held them and re-binds a lost mesh. Call once per frame.
         void Update();
 
         //! How many requests are queued or running, for console output.
@@ -110,25 +112,19 @@ namespace GOAT_Navigation
         //! Drops requests cancelled while their worker was running. No tasks may be in flight.
         void ReapCancelled();
 
-        //! Blocks until no worker is running. Must be called before anything a worker reads is torn down.
-        void WaitForInFlight();
-
-        //! Reports one worker finished. The last one wakes whoever is waiting on the batch.
-        void FinishTask();
-
-        //! Destroys the finished batch's graph, once it is safe to.
-        void RetireBatch();
+        //! Blocks until no worker is running a query. Must be called before anything a worker reads is torn down.
+        void WaitForIdle();
 
         //! Re-binds when a mesh should be usable but is not, so a missed notification does not
         //! leave path queries failing for the rest of the level.
         void RecoverBinding();
 
-        //! Runs one query and stores the result by id. Takes no pointer into the request table,
-        //! because RequestPath may reallocate it while this runs on a worker thread.
-        void RunQuery(PathRequestId id, Worker& worker);
+        //! A worker thread's body: takes the oldest queued request the moment it is free, so one slow
+        //! query never holds back the others.
+        void WorkerLoop(size_t workerIndex);
 
-        //! The work one worker does, wrapped by RunQuery so the in flight count always falls.
-        void RunQueryAndStore(PathRequestId id, Worker& worker);
+        //! One query on one worker, stored by id once it finishes.
+        void RunQueryAndStore(PathRequestId id, const AZ::Vector3& from, const AZ::Vector3& to, Worker& worker);
 
         //! The query itself, on a worker's own objects, under a shared read lock.
         void RunQueryImpl(
@@ -137,9 +133,6 @@ namespace GOAT_Navigation
             Worker& worker,
             AZStd::vector<AZ::Vector3>& outPath,
             PathStatus& outStatus) const;
-
-        //! Submits everything queued that is not yet running.
-        void SubmitPending();
 
         AZ::EntityId m_navMeshEntity;
         //! Kept alive so the mesh outlives a rebuild that swaps Recast's own object.
@@ -153,30 +146,23 @@ namespace GOAT_Navigation
         mutable AZStd::mutex m_requestLock;
 
         AZStd::vector<Worker> m_workers;
-        AZStd::vector<Request> m_requests;
+        //! Requests by id, so every lookup is constant time however many agents are waiting.
+        AZStd::unordered_map<PathRequestId, Request> m_requests;
+        //! Ids waiting to be submitted, oldest first. An id whose request was cancelled or taken is
+        //! skipped when it reaches the front.
+        AZStd::deque<PathRequestId> m_pendingOrder;
+        //! Ids cancelled while a worker held them, erased by ReapCancelled once nothing is in flight.
+        AZStd::vector<PathRequestId> m_cancelledIds;
         PathRequestId m_nextRequestId = 1;
 
-        //! Sized from goat_pathQueryThreads at construction; TaskExecutor takes its count there.
-        AZStd::unique_ptr<AZ::TaskExecutor> m_executor;
-
-        //! One graph per batch, never reused. AZ::TaskGraph sets its submitted flag *after*
-        //! handing the tasks to the executor, so a batch that finishes during that call clears
-        //! the flag first and has it set again permanently -- after which Reset and AddTask
-        //! both assert. Short path queries hit that race routinely, so nothing is reused.
-        AZStd::unique_ptr<AZ::TaskGraph> m_taskGraph;
-
-        //! Not a resubmit gate -- the in flight count is that. This exists only so the graph
-        //! can be destroyed safely: the count falls inside a task body, which is before the
-        //! executor releases that task, and the graph must outlive every release.
-        AZStd::unique_ptr<AZ::TaskGraphEvent> m_taskGraphEvent;
-        AZ::TaskDescriptor m_taskDescriptor{ "Path query", "GOAT Navigation" };
-
-        //! How many workers are still running, which is the only thing gating a new batch.
-        //! Counted here rather than read from a TaskGraphEvent so completion does not depend
-        //! on the graph's own state, which the race above corrupts.
-        mutable AZStd::mutex m_flightLock;
-        AZStd::condition_variable m_flightIdle;
-        size_t m_tasksInFlight = 0;
+        //! One persistent thread per worker, started at construction and joined at destruction.
+        AZStd::vector<AZStd::thread> m_threads;
+        //! Both wait on m_requestLock: workers for queued work, ClearNavigationMesh for the last query to end.
+        AZStd::condition_variable m_workAvailable;
+        AZStd::condition_variable m_idle;
+        //! How many workers are inside a query right now. Guarded by m_requestLock.
+        size_t m_running = 0;
+        bool m_stopping = false;
 
         //! True between a mesh rebuild starting and finishing, when reads must not run.
         //! Atomic because Recast raises those notifications from whichever thread drives the

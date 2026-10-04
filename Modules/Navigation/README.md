@@ -52,5 +52,4 @@ Console variables:
 | Name | Default | Meaning |
 |---|---|---|
 | `goat_pathQueryThreads` | 2 | Worker threads, each with its own Detour query |
-| `goat_pathQueryBudget` | 16 | Path queries submitted in one frame |
 | `goat_navDefaultSpeed` | 3.0 | Speed used when a `move_to` node names none |
