@@ -89,6 +89,18 @@ namespace GOAT_Animation
         }
     }
 
+    bool SignalTracker::IsActive() const
+    {
+        for (const State& state : m_states)
+        {
+            if (state.m_window ? state.m_open : state.m_pulseLeft > 0.0f)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool SignalTracker::Desired(size_t index) const
     {
         AZ_Assert(index < m_states.size(), "A binding index must address a configured binding");

@@ -113,6 +113,9 @@ namespace GOAT_Animation
         AZ_Assert(GetEntityId().IsValid(), "A component only activates on a valid entity");
 
         m_tracker.Configure(m_bindings, m_minWeight);
+        m_settled = false;
+        m_idleFor = 0.0f;
+        m_hasEvents.store(false);
         m_written.assign(m_bindings.size(), static_cast<signed char>(-1));
         m_writtenReady.assign(m_bindings.size(), static_cast<signed char>(-1));
         m_warnedUnresolved.assign(m_bindings.size(), static_cast<signed char>(0));
@@ -171,6 +174,7 @@ namespace GOAT_Animation
 
         AZStd::lock_guard<AZStd::mutex> lock(m_queueMutex);
         m_queue.clear();
+        m_hasEvents.store(false);
     }
 
     void GOATAnimationSignalsComponent::OnMotionEvent(EMotionFX::Integration::MotionEvent motionEvent)
@@ -190,6 +194,7 @@ namespace GOAT_Animation
         if (m_queue.size() < MaxQueuedEvents)
         {
             m_queue.push_back(event);
+            m_hasEvents.store(true);
         }
     }
 
@@ -258,15 +263,29 @@ namespace GOAT_Animation
 
     void GOATAnimationSignalsComponent::OnTick(float deltaTime, [[maybe_unused]] AZ::ScriptTimePoint time)
     {
+        // Nothing open, nothing written wrong and nothing new to hear: a pass would change nothing.
+        constexpr float IdleLookupSeconds = 1.0f;
+        if (m_settled && !m_hasEvents.load())
+        {
+            m_idleFor += deltaTime;
+            if (m_idleFor < IdleLookupSeconds)
+            {
+                return;
+            }
+        }
+        m_idleFor = 0.0f;
+        m_settled = false;
+
         // Ageing comes first, so an event taken below is seen for at least one tick.
         m_tracker.Advance(deltaTime);
 
-        AZStd::vector<SignalEvent> taken;
+        m_taken.clear();
         {
             AZStd::lock_guard<AZStd::mutex> lock(m_queueMutex);
-            taken.swap(m_queue);
+            m_taken.swap(m_queue);
+            m_hasEvents.store(false);
         }
-        for (const SignalEvent& event : taken)
+        for (const SignalEvent& event : m_taken)
         {
             m_tracker.OnEvent(event);
         }
@@ -330,5 +349,7 @@ namespace GOAT_Animation
         {
             agents->WakeAgents(AZStd::span<const GOAT::AgentId>(&m_agent, 1));
         }
+
+        m_settled = !m_tracker.IsActive();
     }
 } // namespace GOAT_Animation

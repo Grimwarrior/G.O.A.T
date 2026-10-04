@@ -39,6 +39,9 @@ namespace GOAT_Animation
 
         size_t GetBindingCount() const { return m_states.size(); }
 
+        //! True while any window is open or any pulse is still running, which is when ticking can change something.
+        bool IsActive() const;
+
         //! What the binding's variable should hold now.
         bool Desired(size_t index) const;
 

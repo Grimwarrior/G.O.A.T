@@ -11,6 +11,7 @@
 #include <AzCore/Component/Component.h>
 #include <AzCore/Component/TickBus.h>
 #include <AzCore/std/containers/vector.h>
+#include <AzCore/std/parallel/atomic.h>
 #include <AzCore/std/parallel/mutex.h>
 
 #include <Integration/AnimationBus.h>
@@ -82,5 +83,13 @@ namespace GOAT_Animation
         //! Events raised on another thread wait here until the main thread tick takes them.
         AZStd::mutex m_queueMutex;
         AZStd::vector<SignalEvent> m_queue;
+        //! The tick's side of the queue, swapped with it so both keep their capacity between frames.
+        AZStd::vector<SignalEvent> m_taken;
+        //! Set with the push and cleared when the tick takes the queue, so an idle tick need not lock to look.
+        AZStd::atomic<bool> m_hasEvents{ false };
+        //! True once a full pass left everything written and nothing open or pulsing, so ticks can be skipped until an event arrives.
+        bool m_settled = false;
+        //! Time spent skipping, so the agent is still looked up again now and then while nothing happens.
+        float m_idleFor = 0.0f;
     };
 } // namespace GOAT_Animation

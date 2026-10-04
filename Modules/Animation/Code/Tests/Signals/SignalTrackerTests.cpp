@@ -198,4 +198,20 @@ namespace GOAT_Animation
         EXPECT_TRUE(m_tracker.Desired(0));
         EXPECT_TRUE(m_tracker.Desired(2));
     }
+
+    //! The component skips its tick while nothing is up, so this is what has to stay true until the last thing ends.
+    TEST_F(SignalTrackerFixture, IsActive_IsTrueOnlyWhileAWindowIsOpenOrAPulseIsRunning)
+    {
+        EXPECT_FALSE(m_tracker.IsActive());
+
+        m_tracker.OnEvent(Event("combo", true));
+        EXPECT_TRUE(m_tracker.IsActive());
+        m_tracker.OnEvent(Event("combo", false));
+        EXPECT_FALSE(m_tracker.IsActive());
+
+        m_tracker.OnEvent(Event("hit", true));
+        EXPECT_TRUE(m_tracker.IsActive());
+        m_tracker.Advance(PulseHoldSeconds + 0.01f);
+        EXPECT_FALSE(m_tracker.IsActive());
+    }
 } // namespace GOAT_Animation
