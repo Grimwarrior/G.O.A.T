@@ -30,7 +30,7 @@ namespace GOAT
         void Disconnect();
 
         //! True when a watched scope has changed since the last Clear.
-        bool IsDirty() const;
+        bool IsDirty(const AgentProgram& program) const;
 
         //! Marks the agent as needing a guard re-check on its next tick.
         void MarkDirty() { m_forced = true; }
@@ -48,8 +48,6 @@ namespace GOAT
         //! that moves when it grows. The lookup is an array index, and only the scopes this
         //! tree actually guards on are asked about -- usually one.
         IBlackboardSystem* m_blackboard = nullptr;
-        //! Which slots in each watched scope count. Owned by the archetype the agent holds.
-        const AgentProgram* m_program = nullptr;
         AgentId m_agent;
 
         //! Which scopes this tree guards on.

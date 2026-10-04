@@ -29,8 +29,10 @@ namespace GOAT
                 return 0;
             }
 
-            const AZStd::vector<AZ::u32>& stamps = m_stamps[static_cast<size_t>(key.GetType())];
-            return key.GetIndex() < stamps.size() ? stamps[key.GetIndex()] : 0;
+            const size_t type = static_cast<size_t>(key.GetType());
+            const size_t end = type + 1 < m_stampBase.size() ? m_stampBase[type + 1] : m_stamps.size();
+            const size_t at = static_cast<size_t>(m_stampBase[type]) + key.GetIndex();
+            return at < end ? m_stamps[at] : 0;
         }
 
         //! Grows every array to the layout's slot counts, seeding only the newly added slots.
@@ -71,10 +73,12 @@ namespace GOAT
         AZStd::vector<AZ::Transform> m_transforms;
         AZStd::vector<EntityIdList> m_entityLists;
 
-        //! Starts at one so a watcher's zeroed count never matches an untouched storage.
-        //! When each slot last changed, per type and parallel to the value arrays above.
-        AZStd::array<AZStd::vector<AZ::u32>, static_cast<size_t>(BlackboardType::Count)> m_stamps;
+        //! When each slot last changed. One array for every type, laid out type after type from
+        //! m_stampBase, so a storage pays for a single extra allocation rather than one per type.
+        AZStd::vector<AZ::u32> m_stamps;
+        AZStd::array<AZ::u32, static_cast<size_t>(BlackboardType::Count)> m_stampBase{};
 
+        //! Starts at one so a watcher's zeroed count never matches an untouched storage.
         AZ::u32 m_epoch = 1;
     };
 
@@ -140,7 +144,7 @@ namespace GOAT
         // Only a real change counts. A write of the value already there must not wake anybody,
         // which is what keeps a director writing the same order every tick from costing anything.
         ++m_epoch;
-        m_stamps[static_cast<size_t>(key.GetType())][key.GetIndex()] = m_epoch;
+        m_stamps[m_stampBase[static_cast<size_t>(key.GetType())] + key.GetIndex()] = m_epoch;
         return true;
     }
 } // namespace GOAT

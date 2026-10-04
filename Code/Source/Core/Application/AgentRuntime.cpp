@@ -104,7 +104,7 @@ namespace GOAT
         AZ_Assert(deltaTime >= 0.0f, "An agent cannot be ticked backwards in time");
         agent.m_elapsed += deltaTime;
 
-        const bool dirty = agent.m_observer.IsDirty();
+        const bool dirty = agent.m_observer.IsDirty(*agent.m_program);
         const bool wantsTick = agent.m_program->m_wantsTick;
 
         // Asleep: nothing it watches changed and whatever it was waiting for has not come due.

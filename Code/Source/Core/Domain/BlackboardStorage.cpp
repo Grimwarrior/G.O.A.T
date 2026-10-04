@@ -33,9 +33,36 @@ namespace GOAT
         m_transforms.resize(count(BlackboardType::Transform), AZ::Transform::CreateIdentity());
         m_entityLists.resize(count(BlackboardType::EntityIdList), EntityIdList{});
 
-        for (size_t type = 0; type < m_stamps.size(); ++type)
+        AZStd::array<AZ::u32, static_cast<size_t>(BlackboardType::Count)> base{};
+        AZ::u32 total = 0;
+        bool fresh = true;
+        for (size_t type = 0; type < base.size(); ++type)
         {
-            m_stamps[type].resize(count(static_cast<BlackboardType>(type)), 0);
+            base[type] = total;
+            total += count(static_cast<BlackboardType>(type));
+            fresh = fresh && previous[type] == 0;
+        }
+
+        if (fresh)
+        {
+            m_stamps.assign(total, 0);
+            m_stampBase = base;
+        }
+        else if (total != m_stamps.size() || base != m_stampBase)
+        {
+            // A variable declared after this storage existed moves the arrays after it, so each
+            // type's stamps are carried over to where the new layout puts them.
+            AZStd::vector<AZ::u32> grown(total, 0);
+            for (size_t type = 0; type < base.size(); ++type)
+            {
+                const size_t kept = AZStd::min<size_t>(previous[type], count(static_cast<BlackboardType>(type)));
+                for (size_t i = 0; i < kept; ++i)
+                {
+                    grown[base[type] + i] = m_stamps[m_stampBase[type] + i];
+                }
+            }
+            m_stamps = AZStd::move(grown);
+            m_stampBase = base;
         }
 
         for (const auto& [key, value] : layout.m_defaults)
@@ -64,10 +91,8 @@ namespace GOAT
         m_quaternions.clear();
         m_transforms.clear();
         m_entityLists.clear();
-        for (AZStd::vector<AZ::u32>& stamps : m_stamps)
-        {
-            stamps.clear();
-        }
+        m_stamps.clear();
+        m_stampBase.fill(0);
 
         EnsureCapacity(layout);
 

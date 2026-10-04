@@ -150,16 +150,16 @@ namespace GOAT
         GuardWatch watch;
         watch.Connect(program, *m_blackboard, AgentId{});
         watch.Clear();
-        EXPECT_FALSE(watch.IsDirty());
+        EXPECT_FALSE(watch.IsDirty(program));
 
         EXPECT_TRUE(m_blackboard->Set<AZ::s64>(unrelated, 4, AgentId{}));
-        EXPECT_FALSE(watch.IsDirty());
+        EXPECT_FALSE(watch.IsDirty(program));
 
         EXPECT_TRUE(m_blackboard->Set<AZ::s64>(guarded, 4, AgentId{}));
-        EXPECT_TRUE(watch.IsDirty());
+        EXPECT_TRUE(watch.IsDirty(program));
 
         watch.Clear();
-        EXPECT_FALSE(watch.IsDirty());
+        EXPECT_FALSE(watch.IsDirty(program));
     }
 
     //! A program that never listed its slots keeps the old rule, so anything in the scope wakes it.
@@ -175,6 +175,6 @@ namespace GOAT
         watch.Clear();
 
         EXPECT_TRUE(m_blackboard->Set<AZ::s64>(unrelated, 4, AgentId{}));
-        EXPECT_TRUE(watch.IsDirty());
+        EXPECT_TRUE(watch.IsDirty(program));
     }
 } // namespace GOAT
